@@ -1,0 +1,93 @@
+import { useState } from 'react';
+import type { ChatMessage, DataPart, Part } from '../types/a2a';
+import { TextPartView } from './parts/TextPartView';
+import { FilePartView } from './parts/FilePartView';
+import { DataPartView } from './parts/DataPartView';
+import { DebugDrawer } from './DebugDrawer';
+
+interface Props {
+  message: ChatMessage;
+}
+
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+/** DataParts collapsible — hidden by default */
+function DataPartsDrawer({ parts }: { parts: DataPart[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="data-drawer">
+      <button
+        className={`data-drawer-toggle ${open ? 'data-drawer-toggle--open' : ''}`}
+        onClick={() => setOpen(v => !v)}
+        title="Tool calls & intermediate data"
+      >
+        <span className="data-drawer-icon">⚙️</span>
+        {parts.length} tool call{parts.length !== 1 ? 's' : ''}
+        <span className="data-drawer-chevron">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="data-drawer-body">
+          {parts.map((p, i) => <DataPartView key={i} part={p} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function renderVisiblePart(part: Part, index: number) {
+  switch (part.kind) {
+    case 'text': return <TextPartView key={index} part={part} />;
+    case 'file': return <FilePartView key={index} part={part} />;
+    default:     return null;
+  }
+}
+
+export function MessageBubble({ message }: Props) {
+  const isUser   = message.role === 'user';
+  const isSystem = message.role === 'system';
+
+  if (isSystem) {
+    return (
+      <div className="msg-system">
+        <span className="msg-system-text">
+          {message.parts.map(p => p.kind === 'text' ? p.text : '').join('')}
+        </span>
+      </div>
+    );
+  }
+
+  const visibleParts = message.parts.filter(p => p.kind !== 'data');
+  const dataParts    = message.parts.filter((p): p is DataPart => p.kind === 'data');
+
+  return (
+    <div className={`msg-row ${isUser ? 'msg-row--user' : 'msg-row--agent'}`}>
+      {!isUser && <div className="msg-avatar msg-avatar--agent">A</div>}
+
+      <div className={`msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--agent'}`}>
+        <div className="msg-parts">
+          {visibleParts.map((part, i) => renderVisiblePart(part, i))}
+
+          {message.streaming && visibleParts.length === 0 && (
+            <span className="msg-typing">
+              <span className="dot" /><span className="dot" /><span className="dot" />
+            </span>
+          )}
+          {message.streaming && visibleParts.length > 0 && (
+            <span className="msg-streaming-cursor">▋</span>
+          )}
+        </div>
+
+        {/* DataParts: collapsible, hidden by default */}
+        {dataParts.length > 0 && <DataPartsDrawer parts={dataParts} />}
+
+        <span className="msg-time">{formatTime(message.timestamp)}</span>
+
+        {!isUser && message.debug && <DebugDrawer debug={message.debug} />}
+      </div>
+
+      {isUser && <div className="msg-avatar msg-avatar--user">U</div>}
+    </div>
+  );
+}

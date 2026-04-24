@@ -1,4 +1,4 @@
-import type { AgentCard, Part } from '../types/a2a'
+import type { A2AMessage, AgentCard, Part } from '../types/a2a'
 
 // ---------------------------------------------------------------------------
 // Proxy helpers
@@ -53,14 +53,16 @@ function jsonRpcPayload(method: string, params: Record<string, unknown>) {
   return { jsonrpc: '2.0', id: uuid(), method, params }
 }
 
-function buildMessage(parts: Part[], contextId?: string) {
+function buildMessage(parts: Part[], contextId?: string, history?: A2AMessage[]) {
   const msg: Record<string, unknown> = {
     messageId: uuid(),
     role: 'user',
     parts,
   }
   if (contextId) msg['contextId'] = contextId
-  return { message: msg }
+  const params: Record<string, unknown> = { message: msg }
+  if (history && history.length > 0) params['history'] = history
+  return params
 }
 
 // ---------------------------------------------------------------------------
@@ -169,8 +171,9 @@ export async function sendChat(
   apiKey?: string,
   proxyUrl?: string,
   noProxy?: string,
+  history?: A2AMessage[],
 ): Promise<{ parts: Part[]; context_id: string; debug: { request: Record<string, unknown>; response: Record<string, unknown> } }> {
-  const payload = jsonRpcPayload('message/send', buildMessage(parts, contextId))
+  const payload = jsonRpcPayload('message/send', buildMessage(parts, contextId, history))
   const res = await agentFetch(agentRpcUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -192,8 +195,9 @@ export async function* streamChat(
   apiKey?: string,
   proxyUrl?: string,
   noProxy?: string,
+  history?: A2AMessage[],
 ): AsyncGenerator<{ parts: Part[]; context_id: string; done: boolean; rawEvent?: Record<string, unknown> }> {
-  const payload = jsonRpcPayload('message/stream', buildMessage(parts, contextId))
+  const payload = jsonRpcPayload('message/stream', buildMessage(parts, contextId, history))
   const res = await agentFetch(agentRpcUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },

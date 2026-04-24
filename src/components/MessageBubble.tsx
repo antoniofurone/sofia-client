@@ -61,31 +61,34 @@ export function MessageBubble({ message }: Props) {
   const visibleParts = message.parts.filter(p => p.kind !== 'data');
   const dataParts    = message.parts.filter((p): p is DataPart => p.kind === 'data');
 
+  const bubble = (
+    <div className={`msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--agent'}`}>
+      <div className="msg-parts">
+        {visibleParts.map((part, i) => renderVisiblePart(part, i))}
+
+        {message.streaming && visibleParts.length === 0 && (
+          <span className="msg-typing">
+            <span className="dot" /><span className="dot" /><span className="dot" />
+          </span>
+        )}
+        {message.streaming && visibleParts.length > 0 && (
+          <span className="msg-streaming-cursor">▋</span>
+        )}
+      </div>
+
+      {dataParts.length > 0 && <DataPartsDrawer parts={dataParts} />}
+
+      <span className="msg-time">{formatTime(message.timestamp)}</span>
+
+      {!isUser && message.debug && <DebugDrawer debug={message.debug} />}
+    </div>
+  );
+
   return (
     <div className={`msg-row ${isUser ? 'msg-row--user' : 'msg-row--agent'}`}>
       {!isUser && <div className="msg-avatar msg-avatar--agent">A</div>}
 
-      <div className={`msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--agent'}`}>
-        <div className="msg-parts">
-          {visibleParts.map((part, i) => renderVisiblePart(part, i))}
-
-          {message.streaming && visibleParts.length === 0 && (
-            <span className="msg-typing">
-              <span className="dot" /><span className="dot" /><span className="dot" />
-            </span>
-          )}
-          {message.streaming && visibleParts.length > 0 && (
-            <span className="msg-streaming-cursor">▋</span>
-          )}
-        </div>
-
-        {/* DataParts: collapsible, hidden by default */}
-        {dataParts.length > 0 && <DataPartsDrawer parts={dataParts} />}
-
-        <span className="msg-time">{formatTime(message.timestamp)}</span>
-
-        {!isUser && message.debug && <DebugDrawer debug={message.debug} />}
-      </div>
+      {isUser ? bubble : <div className="msg-bubble-resizer">{bubble}</div>}
 
       {isUser && <div className="msg-avatar msg-avatar--user">U</div>}
     </div>

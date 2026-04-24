@@ -14,6 +14,7 @@ export default function App() {
   const [streaming, setStreaming] = useState(true);
   const [toastError, setToastError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAgentCard, setShowAgentCard] = useState(false);
 
   const showError = useCallback((msg: string) => setToastError(msg), []);
 
@@ -30,10 +31,8 @@ export default function App() {
   });
 
   const handleConnect = (url: string, key: string) => connect(url, key, proxyUrl || undefined, noProxy || undefined);
-
-  const handleSend = async (parts: Part[]) => {
-    await sendParts(parts);
-  };
+  const handleDisconnect = () => { disconnect(); setShowAgentCard(false); };
+  const handleSend = async (parts: Part[]) => { await sendParts(parts); };
 
   return (
     <div className="app">
@@ -41,9 +40,24 @@ export default function App() {
         <div className="app-logo">
           <span className="app-logo-icon">✦</span>
           <span className="app-logo-text">Sofia Client</span>
-          <span className="app-logo-sub">A2A Protocol</span>
         </div>
+
         <div className="app-header-actions">
+          {card && (
+            <button
+              className={`header-agent-chip${showAgentCard ? ' header-agent-chip--active' : ''}`}
+              onClick={() => setShowAgentCard(v => !v)}
+              title="Agent details"
+            >
+              <span className="header-agent-dot" />
+              <span className="header-agent-name">{card.name}</span>
+              {card.version && <span className="header-agent-version">v{card.version}</span>}
+              <span className="header-agent-chevron">{showAgentCard ? '▲' : '▼'}</span>
+            </button>
+          )}
+          {card && (
+            <button className="btn--disconnect" onClick={handleDisconnect} title="Disconnect">✕</button>
+          )}
           <button
             className={`btn btn--ghost btn--icon${showSettings ? ' btn--active' : ''}`}
             onClick={() => setShowSettings(s => !s)}
@@ -60,13 +74,15 @@ export default function App() {
       </header>
 
       <div className="app-body">
-        <ConnectBar
-          isConnecting={isConnecting}
-          isConnected={!!card}
-          streaming={streaming}
-          onConnect={handleConnect}
-          onToggleStreaming={() => setStreaming((s: boolean) => !s)}
-        />
+        {!card && (
+          <ConnectBar
+            isConnecting={isConnecting}
+            isConnected={!!card}
+            streaming={streaming}
+            onConnect={handleConnect}
+            onToggleStreaming={() => setStreaming(s => !s)}
+          />
+        )}
 
         {showSettings && (
           <SettingsBar
@@ -76,8 +92,8 @@ export default function App() {
           />
         )}
 
-        {card && (
-          <AgentCard card={card} onDisconnect={disconnect} />
+        {card && showAgentCard && (
+          <AgentCard card={card} onDisconnect={handleDisconnect} headerless />
         )}
 
         <MessageList messages={messages} />

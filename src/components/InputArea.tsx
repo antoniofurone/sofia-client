@@ -194,6 +194,13 @@ export function InputArea({ onSend, isBusy, disabled }: Props) {
         >
           {'{ }'} Data
         </button>
+        <button
+          className="btn btn--primary btn--send"
+          onClick={handleSend}
+          disabled={!canSend}
+        >
+          {isBusy ? <span className="send-spinner" /> : 'Send ➤'}
+        </button>
       </div>
 
       <div className="tab-content">
@@ -259,19 +266,6 @@ export function InputArea({ onSend, isBusy, disabled }: Props) {
         )}
       </div>
 
-      <div className="input-actions">
-        <button
-          className="btn btn--primary btn--send"
-          onClick={handleSend}
-          disabled={!canSend}
-        >
-          {isBusy ? (
-            <span className="send-spinner" />
-          ) : (
-            'Send ➤'
-          )}
-        </button>
-      </div>
     </div>
   );
 }

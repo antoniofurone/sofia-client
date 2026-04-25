@@ -178,5 +178,15 @@ function a2aProxyPlugin() {
 
 export default defineConfig({
   plugins: [react(), a2aProxyPlugin()],
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    proxy: {
+      // In dev, forward /api/* to the Express backend
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
 })

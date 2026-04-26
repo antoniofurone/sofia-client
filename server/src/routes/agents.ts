@@ -21,14 +21,16 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       );
       rows = result.rows;
     } else {
-      const userId = req.session.userId!;
+      // Both app and user mode: session.userId is the identity for access checks.
+      // app mode  → session.userId = caller_user_id
+      // user mode → session.userId = login user_id
       const result = await pool.query<{ agent_name: string; url: string }>(
         `SELECT c.agent_name, c.url
          FROM sf_agents_config c
          JOIN sf_agents_access a ON a.agent_name = c.agent_name
          WHERE a.user_id = $1
          ORDER BY c.agent_name`,
-        [userId]
+        [req.session.userId]
       );
       rows = result.rows;
     }

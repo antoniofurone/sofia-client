@@ -234,13 +234,13 @@ Metadata injected for user mode:
 { "metadata": { "user_id": "alice", "profile": { "role": "admin" } } }
 ```
 
-#### App mode — grant an app access to an agent
-The `user_id` here is the **service-account credential** (`sf_user.user_id`), not the caller.  
+#### App mode — grant a caller user access to an agent
+The `user_id` here is the **`caller_user_id`** supplied by the calling app at login time.  
 The profile in `sf_agents_access` is ignored in app mode — the `caller_profile` supplied at login time is used instead.
 
 ```sql
 INSERT INTO sf_agents_access (agent_name, user_id)
-VALUES ('my-agent', 'crm-svc');
+VALUES ('my-agent', 'mario.rossi');   -- caller_user_id, not the sf_user credential
 ```
 
 Metadata injected for app mode:

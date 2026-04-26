@@ -112,26 +112,28 @@ async function resolveAgent(agentName: string, req: Request): Promise<{
   const appName: string | null = req.session.appName ?? null;
 
   if (config.AUTH_MODE === 'app') {
-    // Use the sf_user credential (appAuthUserId) for the access-control lookup.
-    const checkId = req.session.appAuthUserId ?? req.session.userId;
-    if (checkId) {
+    // Access check uses caller_user_id (session.userId).
+    // Profile comes from the session (caller_profile supplied by the calling app).
+    const userId = req.session.userId;
+    if (userId) {
       const accessRow = await pool.query(
         'SELECT 1 FROM sf_agents_access WHERE agent_name = $1 AND user_id = $2',
-        [agentName, checkId]
+        [agentName, userId]
       );
-      if (!accessRow.rows.length) return null; // app not granted access to this agent
+      if (!accessRow.rows.length) return null;
     }
-    // Profile is the caller_profile passed in by the calling app.
     profile = req.session.profile ?? null;
 
   } else if (config.AUTH_MODE === 'user') {
+    // Access check uses login user_id (session.userId).
+    // Profile comes from sf_agents_access for that user + agent.
     const userId = req.session.userId;
     if (!userId) return null;
     const accessRow = await pool.query<SfAgentAccess>(
       'SELECT profile FROM sf_agents_access WHERE agent_name = $1 AND user_id = $2',
       [agentName, userId]
     );
-    if (!accessRow.rows.length) return null; // user not granted access to this agent
+    if (!accessRow.rows.length) return null;
     profile = accessRow.rows[0].profile;
   }
   // AUTH_MODE === 'none': skip all checks

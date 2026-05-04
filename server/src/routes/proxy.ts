@@ -172,13 +172,15 @@ router.post('/send', requireAuth, async (req: Request, res: Response): Promise<v
       method: 'POST',
       headers,
       body: JSON.stringify(enriched),
+      signal: AbortSignal.timeout(120_000), // 2 min — agent must respond within this time
     });
 
     const body = await upstream.json();
     res.status(upstream.status).json(body);
   } catch (err) {
     console.error('[proxy] send error:', err);
-    res.status(502).json({ error: err instanceof Error ? err.message : 'Upstream error' });
+    const isTimeout = err instanceof Error && err.name === 'TimeoutError';
+    res.status(isTimeout ? 504 : 502).json({ error: isTimeout ? 'Agent did not respond in time' : err instanceof Error ? err.message : 'Upstream error' });
   }
 });
 
@@ -212,13 +214,31 @@ router.post('/stream', requireAuth, async (req: Request, res: Response): Promise
     };
     if (agent.apiKey) headers['X-API-Key'] = agent.apiKey;
 
+    // Abort controller shared by fetch + no-data watchdog.
+    // CONNECT_TIMEOUT_MS : max time to receive the first byte from the agent.
+    // NO_DATA_TIMEOUT_MS : if the stream goes silent for this long, we abort.
+    const CONNECT_TIMEOUT_MS = 30_000;
+    const NO_DATA_TIMEOUT_MS = 60_000;
+
+    const controller = new AbortController();
+    const connectTimer = setTimeout(() => controller.abort(new Error('Agent connection timeout')), CONNECT_TIMEOUT_MS);
+
+    let noDataTimer: ReturnType<typeof setTimeout> | null = null;
+    const resetNoDataTimer = () => {
+      if (noDataTimer) clearTimeout(noDataTimer);
+      noDataTimer = setTimeout(() => controller.abort(new Error('Agent stream stalled')), NO_DATA_TIMEOUT_MS);
+    };
+
     const upstream = await fetch(rpcUrl, {
       method: 'POST',
       headers,
       body: JSON.stringify(enriched),
+      signal: controller.signal,
     });
+    clearTimeout(connectTimer); // first byte received — cancel connect timeout
 
     if (!upstream.ok || !upstream.body) {
+      if (noDataTimer) clearTimeout(noDataTimer);
       res.status(upstream.status).json({ error: `Upstream error: ${upstream.status}` });
       return;
     }
@@ -230,20 +250,34 @@ router.post('/stream', requireAuth, async (req: Request, res: Response): Promise
     res.flushHeaders();
 
     const reader = upstream.body.getReader();
-    req.on('close', () => reader.cancel());
+    req.on('close', () => {
+      controller.abort();
+      reader.cancel();
+    });
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      res.write(value);
+    try {
+      resetNoDataTimer(); // start no-data watchdog
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        resetNoDataTimer(); // reset watchdog on each chunk
+        res.write(value);
+      }
+    } finally {
+      if (noDataTimer) clearTimeout(noDataTimer);
+      res.end();
     }
-    res.end();
   } catch (err) {
     console.error('[proxy] stream error:', err);
     if (!res.headersSent) {
-      res.status(502).json({ error: err instanceof Error ? err.message : 'Upstream error' });
+      const msg = err instanceof Error ? err.message : 'Upstream error';
+      res.status(502).json({ error: msg });
     } else {
-      res.end();
+      // Headers already sent — write an SSE error event so the client can surface it
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ error: err instanceof Error ? err.message : 'Stream error' })}\n\n`);
+        res.end();
+      }
     }
   }
 });

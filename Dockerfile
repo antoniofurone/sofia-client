@@ -39,6 +39,13 @@ EXPOSE 8080
 ENV PORT=8080
 ENV NODE_ENV=production
 
+# Re-declare build args so the Express server reads the correct auth mode at runtime.
+# ARG scope is per-stage; without this the server defaults to 'none'.
+ARG VITE_MODE=production
+ARG VITE_AUTH_MODE=none
+ENV VITE_MODE=$VITE_MODE
+ENV VITE_AUTH_MODE=$VITE_AUTH_MODE
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD wget -qO- http://localhost:$PORT/api/health || exit 1
 

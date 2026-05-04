@@ -37,6 +37,7 @@ export async function* streamChatProd(
   agentName: string,
   parts: Part[],
   contextId?: string,
+  signal?: AbortSignal,
 ): AsyncGenerator<{ parts: Part[]; context_id: string; done: boolean; rawEvent?: Record<string, unknown> }> {
   const payload = jsonRpcPayload('message/stream', buildMessage(parts, contextId));
   const res = await fetch('/api/proxy/stream', {
@@ -44,6 +45,7 @@ export async function* streamChatProd(
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     body: JSON.stringify({ agentName, payload }),
+    signal,
   });
 
   if (res.status === 401) {

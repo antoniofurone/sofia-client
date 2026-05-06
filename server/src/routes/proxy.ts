@@ -40,8 +40,8 @@ async function resolveRpcUrl(baseUrl: string, apiKey: string | null): Promise<st
     }
   }
 
-  // Agent card not found: use the base URL as-is and cache the fallback
-  rpcUrlCache.set(baseUrl, { rpcUrl: baseUrl, cachedAt: Date.now() });
+  // Agent card not found: use the base URL as-is but do NOT cache — the agent may
+  // still be starting up and its card could become available on the next request.
   return baseUrl;
 }
 
@@ -239,7 +239,9 @@ router.post('/stream', requireAuth, async (req: Request, res: Response): Promise
 
     if (!upstream.ok || !upstream.body) {
       if (noDataTimer) clearTimeout(noDataTimer);
-      res.status(upstream.status).json({ error: `Upstream error: ${upstream.status}` });
+      // Use 502 so the client can distinguish "agent returned an error" from
+      // "proxy route not found" (which would be a real 404 from this server).
+      res.status(502).json({ error: `Agent returned ${upstream.status}` });
       return;
     }
 

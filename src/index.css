@@ -1134,29 +1134,102 @@ body {
   border-top: 1px solid var(--border);
 }
 
+/* ── Table container: scroll both axes, cap height so header stays visible ── */
 .text-part.markdown-body .table-wrap {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 520px;
   max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 .text-part.markdown-body table {
   border-collapse: collapse;
   min-width: 100%;
   font-size: 13px;
-  white-space: nowrap;
 }
+
 .text-part.markdown-body th,
 .text-part.markdown-body td {
   border: 1px solid var(--border);
   padding: 6px 10px;
   text-align: left;
+  white-space: nowrap;
 }
+
+/* ── Data cells: truncate long content, show ellipsis ── */
+.text-part.markdown-body td {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Sticky header row ── */
 .text-part.markdown-body th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   background: var(--surface2);
   font-weight: 600;
   color: var(--accent);
 }
-.text-part.markdown-body tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+
+/* ── Sticky first column ── */
+.text-part.markdown-body td:first-child,
+.text-part.markdown-body th:first-child {
+  position: sticky;
+  left: 0;
+  /* box-shadow fakes the right border — border-collapse hides it on sticky elements */
+  box-shadow: 1px 0 0 var(--border);
+}
+.text-part.markdown-body td:first-child {
+  z-index: 1;
+  background: var(--surface);
+}
+.text-part.markdown-body th:first-child {
+  z-index: 3; /* above both sticky header and sticky first column */
+}
+
+/* ── Alternating rows (solid color so sticky first column bg is correct) ── */
+.text-part.markdown-body tr:nth-child(even) td {
+  background: var(--surface2);
+}
+.text-part.markdown-body tr:nth-child(even) td:first-child {
+  background: var(--surface2);
+}
+
+/* ── Row hover highlight ── */
+.text-part.markdown-body tbody tr:hover td {
+  background: rgba(108, 99, 255, 0.10);
+}
+.text-part.markdown-body tbody tr:hover td:first-child {
+  background: color-mix(in srgb, var(--surface) 90%, var(--accent) 10%);
+}
+
+/* ── Sort indicators on clickable headers ── */
+.text-part.markdown-body th[data-col] {
+  cursor: pointer;
+  user-select: none;
+  padding-right: 24px;
+}
+.text-part.markdown-body th[data-col]::after {
+  content: '↕';
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.25;
+  font-size: 11px;
+  font-weight: 400;
+}
+.text-part.markdown-body th[data-col]:hover {
+  background: color-mix(in srgb, var(--surface2) 80%, var(--accent) 20%);
+  color: #fff;
+}
+.text-part.markdown-body th[data-col]:hover::after { opacity: 0.6; }
+.text-part.markdown-body th[data-sort="asc"]::after  { content: '↑'; opacity: 1; color: #fff; }
+.text-part.markdown-body th[data-sort="desc"]::after { content: '↓'; opacity: 1; color: #fff; }
 
 /* User bubble: override link color since bg is accent */
 .msg-bubble--user .text-part.markdown-body a { color: #fff; }

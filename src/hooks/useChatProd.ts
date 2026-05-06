@@ -110,8 +110,16 @@ export function useChatProd({ agentName, streaming, onError, onSessionExpired }:
           }
         } finally {
           clearTimeout(watchdog);
-          // Ensure streaming indicator is always cleared, even if loop exited without done=true
-          updateMessage(agentMsgId, m => ({ ...m, streaming: false }));
+          updateMessage(agentMsgId, m => ({
+            ...m,
+            streaming: false,
+            // If the agent completed but sent no visible parts (e.g. a pure
+            // status-update with no message/artifact payload), show a minimal
+            // notice so the bubble is never left silently empty.
+            parts: m.parts.length > 0
+              ? m.parts
+              : [{ kind: 'text', text: '_Task completed._' }],
+          }));
         }
 
       } else {

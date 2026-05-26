@@ -20,19 +20,23 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(sessionMiddleware);
 
+// Base path support: when deployed behind a path-based load balancer (e.g. /a),
+// set BASE_PATH=/a at runtime. Leave empty when served at the domain root.
+const bp = config.BASE_PATH; // e.g. '/a' or ''
+
 // API routes
-app.use('/api/auth', authRouter);
-app.use('/api/agents', agentsRouter);
-app.use('/api/proxy', proxyRouter);
+app.use(`${bp}/api/auth`, authRouter);
+app.use(`${bp}/api/agents`, agentsRouter);
+app.use(`${bp}/api/proxy`, proxyRouter);
 
 // Health check
-app.get('/api/health', (_req, res) => res.json({ ok: true, mode: config.MODE }));
+app.get(`${bp}/api/health`, (_req, res) => res.json({ ok: true, mode: config.MODE }));
 
 // Serve the built React SPA in production
 // __dirname = server/dist/  →  ../../dist = <root>/dist
 if (config.NODE_ENV !== 'development') {
   const distDir = path.resolve(__dirname, '../../dist');
-  app.use(express.static(distDir));
+  app.use(bp || '/', express.static(distDir));
   app.get('*', (_req, res) => {
     res.sendFile(path.join(distDir, 'index.html'));
   });

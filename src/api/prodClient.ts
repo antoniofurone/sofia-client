@@ -1,5 +1,6 @@
 import type { Part } from '../types/a2a';
 import { normalizePart, extractContextId, jsonRpcPayload, buildMessage } from './clientUtils';
+import { apiBase } from './apiBase';
 
 // ---------------------------------------------------------------------------
 // Production API client — routes all A2A traffic through the Express backend.
@@ -12,7 +13,7 @@ export async function sendChatProd(
   contextId?: string,
 ): Promise<{ parts: Part[]; context_id: string; debug: { request: Record<string, unknown>; response: Record<string, unknown> } }> {
   const payload = jsonRpcPayload('message/send', buildMessage(parts, contextId));
-  const res = await fetch('/api/proxy/send', {
+  const res = await fetch(`${apiBase}/api/proxy/send`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -40,7 +41,7 @@ export async function* streamChatProd(
   signal?: AbortSignal,
 ): AsyncGenerator<{ parts: Part[]; context_id: string; done: boolean; rawEvent?: Record<string, unknown> }> {
   const payload = jsonRpcPayload('message/stream', buildMessage(parts, contextId));
-  const res = await fetch('/api/proxy/stream', {
+  const res = await fetch(`${apiBase}/api/proxy/stream`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
@@ -114,7 +115,7 @@ export async function* streamChatProd(
 }
 
 export async function fetchAgentCardProd(agentName: string) {
-  const res = await fetch(`/api/proxy/card?agentName=${encodeURIComponent(agentName)}`, {
+  const res = await fetch(`${apiBase}/api/proxy/card?agentName=${encodeURIComponent(agentName)}`, {
     credentials: 'include',
   });
   if (!res.ok) throw new Error(`Failed to fetch agent card: ${res.status}`);

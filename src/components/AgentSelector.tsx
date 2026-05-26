@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiBase } from '../api/apiBase';
 
 interface AgentOption {
   agent_name: string;
@@ -17,7 +18,7 @@ export function AgentSelector({ selectedAgent, onSelect, disabled }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/agents', { credentials: 'include' })
+    fetch(`${apiBase}/api/agents`, { credentials: 'include' })
       .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then((data: AgentOption[]) => {
         setAgents(data);

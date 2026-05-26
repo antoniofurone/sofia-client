@@ -47,12 +47,18 @@ cp .env.example .env
 |----------|--------|-------------|
 | `VITE_MODE` | `debug` \| `production` | Selects the UI and backend behaviour. Embedded in the React bundle at build time. |
 | `VITE_AUTH_MODE` | `none` \| `app` \| `user` | Authentication mode (production only). |
+| `VITE_BASE` | `/` \| `/a/` \| … | Base path when served under a sub-path (e.g. `/a/`). Must end with `/`. **Build-time** — pass as `--build-arg VITE_BASE=/a/` in Docker. Must match `BASE_PATH`. |
 | `PORT` | `3000` | Express server port. |
+| `BASE_PATH` | `` \| `/a` | Runtime base path prefix. Set to the same path as `VITE_BASE` (without trailing slash). Required when behind a path-based load balancer. |
 | `SESSION_SECRET` | random string | Required when `VITE_AUTH_MODE` ≠ `none`. |
 | `SESSION_TIMEOUT_MINUTES` | `30` | Inactivity session timeout. |
 | `DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD` | — | PostgreSQL connection (production only). |
 
-> `VITE_*` variables are **build-time** — they are compiled into the JavaScript bundle by Vite. Runtime variables (`DB_*`, `SESSION_SECRET`, `PORT`) are read by the Express server at startup.
+> `VITE_*` variables are **build-time** — they are compiled into the JavaScript bundle by Vite. Runtime variables (`BASE_PATH`, `DB_*`, `SESSION_SECRET`, `PORT`) are read by the Express server at startup.
+
+> **Base path pairing**: `VITE_BASE` and `BASE_PATH` must always be set together.  
+> `VITE_BASE=/a/` → assets served at `/a/assets/…` and API calls go to `/a/api/…`.  
+> `BASE_PATH=/a` → Express mounts routes at `/a/api/…`.
 
 ---
 
@@ -157,12 +163,24 @@ node scripts/simulate-app-login.js ^
 # Password via env var (avoids it appearing in shell history)
 set SOFIA_APP_PASSWORD=secret
 node scripts/simulate-app-login.js --caller-user-id mario.rossi --browser-url http://localhost:5173
+
+# Against the internal LB (path-based routing, e.g. /a)
+# --url and --browser-url both point to the LB base path
+node scripts/simulate-app-login.js ^
+  --url            https://sofia-chat-dev.di.telecomitalia.it/a ^
+  --browser-url    https://sofia-chat-dev.di.telecomitalia.it/a ^
+  --app-name       ai_portal ^
+  --user-id        ai_portal ^
+  --password       <password> ^
+  --caller-user-id mario.rossi ^
+  --caller-profile "{\"role\":\"agent\",\"tenant\":\"acme\"}"
 ```
 
 > **Why two URLs?**  
 > In local dev Express (`:3000`) handles API calls but does **not** serve the SPA — that runs on Vite (`:5173`).  
 > `--url` is the target for the server-to-server `POST /api/auth/app-login`; `--browser-url` is where the token URL is opened.  
-> In production (container) both point to the same host.
+> In production (container) both point to the same host.  
+> When behind a **path-based LB** (e.g. `/a`), both `--url` and `--browser-url` must include the sub-path (`https://host/a`). The script appends `/api/auth/app-login` to `--url`, which the LB routes correctly to the container now that `BASE_PATH=/a` is set.
 
 **Session expiry**: after `SESSION_TIMEOUT_MINUTES` of inactivity the session is invalidated.  
 - `app` mode → overlay "Session Expired" with reload button.  
@@ -282,7 +300,8 @@ sofia-client/
 │   ├── api/
 │   │   ├── client.ts           # Debug A2A client (direct to agent)
 │   │   ├── prodClient.ts       # Production A2A client (via Express proxy)
-│   │   └── clientUtils.ts      # Shared JSON-RPC / normalisation helpers
+│   │   ├── clientUtils.ts      # Shared JSON-RPC / normalisation helpers
+│   │   └── apiBase.ts          # Runtime base path prefix (from VITE_BASE)
 │   ├── components/
 │   │   ├── parts/              # TextPartView (markdown), FilePartView, DataPartView
 │   │   ├── AgentCard.tsx       # Agent details panel
@@ -355,19 +374,53 @@ docker build \
   --build-arg VITE_AUTH_MODE=user \
   -t europe-docker.pkg.dev/<project>/<repo>/sofia-client:latest .
 
-docker push europe-docker.pkg.dev/<project>/<repo>/sofia-client:latest
+# sofia-client
+# test
+docker build --build-arg VITE_MODE=production --build-arg VITE_AUTH_MODE=user -t europe-west8-docker.pkg.dev/spk-dev-dt-prc-0/sofia/sofia-client:latest .
+# produzione
+docker build --build-arg VITE_MODE=production --build-arg VITE_AUTH_MODE=user -t europe-west8-docker.pkg.dev/spk-pro-dt-prc-0/sofia/sofia-client:latest .
 
-# Deploy
+# sofia-client-a  (served at /a behind the internal LB)
+# test
+docker build --build-arg VITE_MODE=production --build-arg VITE_AUTH_MODE=app --build-arg VITE_BASE=/a/ -t europe-west8-docker.pkg.dev/spk-dev-dt-prc-0/sofia/sofia-client-a:latest .
+# produzione
+docker build --build-arg VITE_MODE=production --build-arg VITE_AUTH_MODE=app --build-arg VITE_BASE=/a/ -t europe-west8-docker.pkg.dev/spk-pro-dt-prc-0/sofia/sofia-client-a:latest .
+
+
+gcloud auth login 
+
+gcloud auth configure-docker europe-west8-docker.pkg.dev
+
+
+
+# dev
+docker push europe-west8-docker.pkg.dev/spk-dev-dt-prc-0/sofia/sofia-client:latest
+docker push europe-west8-docker.pkg.dev/spk-dev-dt-prc-0/sofia/sofia-client-a:latest
+# produzione
+docker push europe-west8-docker.pkg.dev/spk-pro-dt-prc-0/sofia/sofia-client:latest
+docker push europe-west8-docker.pkg.dev/spk-pro-dt-prc-0/sofia/sofia-client-a:latest
+
+
+# Deploy — sofia-client (served at domain root, no BASE_PATH needed)
 gcloud run deploy sofia-client \
   --image europe-docker.pkg.dev/<project>/<repo>/sofia-client:latest \
-  --region europe-west1 \
+  --region europe-west8 \
   --platform managed \
   --allow-unauthenticated \
   --set-env-vars "SESSION_SECRET=<secret>,DB_HOST=<host>,DB_NAME=<db>,DB_USER=<user>,DB_PASSWORD=<pw>"
+
+# Deploy — sofia-client-a (served at /a behind the internal LB)
+gcloud run deploy sofia-client-a \
+  --image europe-west8-docker.pkg.dev/<project>/<repo>/sofia-client-a:latest \
+  --region europe-west8 \
+  --platform managed \
+  --allow-unauthenticated \
+  --set-env-vars "SESSION_SECRET=<secret>,DB_HOST=<host>,DB_NAME=<db>,DB_USER=<user>,DB_PASSWORD=<pw>,BASE_PATH=/a"
 ```
 
-> **Note**: `VITE_MODE` and `VITE_AUTH_MODE` are **build-time** arguments baked into the image.  
-> All other sensitive variables are runtime env vars set in Cloud Run — never put them in the image.
+> **Note**: `VITE_MODE`, `VITE_AUTH_MODE` and `VITE_BASE` are **build-time** arguments baked into the image.  
+> All other variables (`BASE_PATH`, `SESSION_SECRET`, `DB_*`) are runtime env vars set in Cloud Run — never put them in the image.  
+> For `sofia-client-a`, always pass `BASE_PATH=/a` as a runtime env var to match the LB path prefix.
 
 ---
 

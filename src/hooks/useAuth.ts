@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { apiBase } from '../api/apiBase';
 
 export interface AuthState {
   loading: boolean;
@@ -25,7 +26,7 @@ export function useAuth() {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch('/api/auth/me', { credentials: 'include' });
+      const res = await fetch(`${apiBase}/api/auth/me`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setState({
@@ -61,7 +62,7 @@ export function useAuth() {
 
     if (appToken) {
       // Exchange one-time token for a session cookie
-      fetch(`/api/auth/exchange?app_token=${encodeURIComponent(appToken)}`, { credentials: 'include' })
+      fetch(`${apiBase}/api/auth/exchange?app_token=${encodeURIComponent(appToken)}`, { credentials: 'include' })
         .then(() => {
           // Clean token from URL without adding to history
           url.searchParams.delete('app_token');
@@ -76,7 +77,7 @@ export function useAuth() {
 
   const login = useCallback(async (userId: string, password: string): Promise<string | null> => {
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(`${apiBase}/api/auth/login`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -94,7 +95,7 @@ export function useAuth() {
   }, [refresh]);
 
   const logout = useCallback(async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    await fetch(`${apiBase}/api/auth/logout`, { method: 'POST', credentials: 'include' });
     setState(s => ({ ...s, authenticated: false, userId: null, profile: null }));
   }, []);
 

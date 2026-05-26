@@ -177,6 +177,10 @@ function a2aProxyPlugin() {
 }
 
 export default defineConfig({
+  // VITE_BASE is a build-time arg (e.g. '/a/') set via --build-arg in Docker.
+  // Must match BASE_PATH runtime env on the Express server.
+  // Leave unset (defaults to '/') when served at the domain root.
+  base: process.env.VITE_BASE ?? '/',
   plugins: [react(), a2aProxyPlugin()],
   server: {
     port: 5173,

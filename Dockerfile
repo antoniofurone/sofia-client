@@ -13,8 +13,10 @@ COPY . .
 # Override these via --build-arg when calling docker build.
 ARG VITE_MODE=production
 ARG VITE_AUTH_MODE=none
+ARG VITE_BASE=/
 ENV VITE_MODE=$VITE_MODE
 ENV VITE_AUTH_MODE=$VITE_AUTH_MODE
+ENV VITE_BASE=$VITE_BASE
 
 # 1) Compile React → dist/
 # 2) Compile Express TypeScript → server/dist/
@@ -47,6 +49,6 @@ ENV VITE_MODE=$VITE_MODE
 ENV VITE_AUTH_MODE=$VITE_AUTH_MODE
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-  CMD wget -qO- http://localhost:$PORT/api/health || exit 1
+  CMD wget -qO- "http://localhost:$PORT${BASE_PATH}/api/health" || exit 1
 
 CMD ["node", "server/dist/index.js"]

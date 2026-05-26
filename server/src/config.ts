@@ -21,6 +21,10 @@ export const config = {
   PORT: parseInt(optional('PORT', '3000'), 10),
   NODE_ENV: optional('NODE_ENV', 'development'),
 
+  // Optional base path when served behind a path-based reverse proxy (e.g. /a).
+  // Set BASE_PATH=/a at runtime; leave empty when served at the root.
+  BASE_PATH: optional('BASE_PATH', '').replace(/\/+$/, ''),
+
   MODE: rawMode,
   AUTH_MODE: rawAuth,
 

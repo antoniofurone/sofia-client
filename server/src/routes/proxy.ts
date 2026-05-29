@@ -265,21 +265,24 @@ router.post('/stream', requireAuth, async (req: Request, res: Response): Promise
         resetNoDataTimer(); // reset watchdog on each chunk
         res.write(value);
       }
+    } catch (streamErr) {
+      // Write a JSON-RPC error event BEFORE res.end() (the finally below) so the
+      // client can surface the real error instead of showing a blank "Task completed".
+      const msg = streamErr instanceof Error ? streamErr.message : 'Stream error';
+      console.error(`[proxy] stream error (${agentName}):`, msg);
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ error: { code: -32099, message: msg } })}\n\n`);
+      }
     } finally {
       if (noDataTimer) clearTimeout(noDataTimer);
       res.end();
     }
   } catch (err) {
-    console.error('[proxy] stream error:', err);
+    // Setup-phase errors (resolveAgent, fetch connect, etc.) — headers not yet sent
+    console.error('[proxy] stream setup error:', err);
     if (!res.headersSent) {
       const msg = err instanceof Error ? err.message : 'Upstream error';
       res.status(502).json({ error: msg });
-    } else {
-      // Headers already sent — write an SSE error event so the client can surface it
-      if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ error: err instanceof Error ? err.message : 'Stream error' })}\n\n`);
-        res.end();
-      }
     }
   }
 });

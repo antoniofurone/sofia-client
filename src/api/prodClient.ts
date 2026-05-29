@@ -67,25 +67,49 @@ export async function* streamChatProd(
     let event: Record<string, unknown>;
     try { event = JSON.parse(raw); } catch { return null; }
 
+    // Top-level error from proxy relay (e.g. "Agent stream stalled", connection dropped)
+    const topError = event['error'] as Record<string, unknown> | undefined;
+    if (topError) {
+      const msg = (topError['message'] as string | undefined) ?? 'Stream error';
+      return { parts: [{ kind: 'text', text: `⚠ ${msg}` }], context_id: currentContextId, done: true, rawEvent: event };
+    }
+
     const result = (event['result'] ?? {}) as Record<string, unknown>;
     const cid = (result['contextId'] ?? result['context_id']) as string | undefined;
     if (cid) currentContextId = cid;
 
+    const status = (result['status'] as Record<string, unknown> | undefined);
     const isFinal =
       (result['final'] as boolean | undefined) === true ||
-      (result['status'] as Record<string, unknown> | undefined)?.['state'] === 'completed' ||
-      (result['status'] as Record<string, unknown> | undefined)?.['state'] === 'failed';
+      status?.['state'] === 'completed' ||
+      status?.['state'] === 'failed';
 
     const kind = result['kind'] as string | undefined;
     let outParts: Part[] = [];
 
     if (kind === 'artifact-update') {
+      // TaskArtifactUpdateEvent — content in result.artifact.parts
       const artifact = (result['artifact'] ?? {}) as Record<string, unknown>;
       outParts = ((artifact['parts'] as Record<string, unknown>[] | undefined) ?? []).map(normalizePart);
-    } else if (kind === 'message' || !kind) {
+    } else if (kind === 'status-update') {
+      // TaskStatusUpdateEvent — content optionally in result.status.message.parts
+      const msg = (status?.['message'] ?? {}) as Record<string, unknown>;
+      outParts = ((msg['parts'] as Record<string, unknown>[] | undefined) ?? []).map(normalizePart);
+      // If the task failed with no message, synthesize a visible error notice
+      if (outParts.length === 0 && status?.['state'] === 'failed') {
+        outParts = [{ kind: 'text', text: '⚠ Task failed' }];
+      }
+    } else {
+      // MessageStreamEvent (kind === 'message' or absent) and any other kind:
+      // try result.parts, result.artifacts, result.message.parts
       outParts = ((result['parts'] as Record<string, unknown>[] | undefined) ?? []).map(normalizePart);
       for (const artifact of (result['artifacts'] as Record<string, unknown>[] | undefined) ?? []) {
         outParts.push(...((artifact['parts'] as Record<string, unknown>[] | undefined) ?? []).map(normalizePart));
+      }
+      if (outParts.length === 0) {
+        // Some agents embed the text inside result.message (same shape as non-streaming)
+        const msg = (result['message'] as Record<string, unknown> | undefined);
+        outParts = ((msg?.['parts'] as Record<string, unknown>[] | undefined) ?? []).map(normalizePart);
       }
     }
 
@@ -114,11 +138,14 @@ export async function* streamChatProd(
   }
 }
 
-export async function fetchAgentCardProd(agentName: string) {
+// Returns the agent card, or null if the agent is reachable but exposes no card (404).
+// Throws on network errors or 5xx — used by the startup overlay to detect cold-start.
+export async function fetchAgentCardProd(agentName: string): Promise<import('../types/a2a').AgentCard | null> {
   const res = await fetch(`${apiBase}/api/proxy/card?agentName=${encodeURIComponent(agentName)}`, {
     credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to fetch agent card: ${res.status}`);
+  if (res.status === 404) return null; // agent is up but doesn't expose a card — that's fine
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 

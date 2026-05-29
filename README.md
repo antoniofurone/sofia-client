@@ -392,7 +392,6 @@ gcloud auth login
 gcloud auth configure-docker europe-west8-docker.pkg.dev
 
 
-
 # dev
 docker push europe-west8-docker.pkg.dev/spk-dev-dt-prc-0/sofia/sofia-client:latest
 docker push europe-west8-docker.pkg.dev/spk-dev-dt-prc-0/sofia/sofia-client-a:latest
@@ -421,6 +420,68 @@ gcloud run deploy sofia-client-a \
 > **Note**: `VITE_MODE`, `VITE_AUTH_MODE` and `VITE_BASE` are **build-time** arguments baked into the image.  
 > All other variables (`BASE_PATH`, `SESSION_SECRET`, `DB_*`) are runtime env vars set in Cloud Run — never put them in the image.  
 > For `sofia-client-a`, always pass `BASE_PATH=/a` as a runtime env var to match the LB path prefix.
+
+---
+
+## Timeout reference
+
+All timeouts in the application, grouped by layer.
+
+### Session & authentication
+
+| Timeout | Default | Where to change |
+|---------|---------|-----------------|
+| **Session inactivity** — server destroys the session after this period of inactivity | 30 min | `SESSION_TIMEOUT_MINUTES` env var (runtime) |
+| **App one-time token expiry** — the token issued by `POST /api/auth/app-login` expires after this time | 5 min | Hardcoded in `server/src/routes/auth.ts` (`Date.now() + 5 * 60 * 1000`) |
+
+### Agent connection (frontend — production mode)
+
+These govern the startup overlay shown when selecting an agent that may be cold-starting.
+
+| Timeout | Default | Where to change |
+|---------|---------|-----------------|
+| **Cold-start max wait** — total time the UI waits for the agent to respond before showing "Connection failed" | 60 s | `CONNECT_TIMEOUT_MS` constant at the top of `src/AppProd.tsx` |
+| **Retry interval** — how often a new connection attempt is made while waiting | 5 s | `CONNECT_RETRY_MS` constant at the top of `src/AppProd.tsx` |
+
+### Streaming (frontend)
+
+| Timeout | Default | Where to change |
+|---------|---------|-----------------|
+| **SSE inactivity watchdog** — if no SSE chunk arrives within this window the request is aborted with "Request cancelled: agent did not respond in time" | 90 s | `CLIENT_STREAM_TIMEOUT_MS` constant at the top of `src/hooks/useChatProd.ts` |
+
+### Backend proxy (server)
+
+| Timeout | Default | Where to change |
+|---------|---------|-----------------|
+| **Non-streaming request timeout** — max time allowed for a `message/send` round-trip | 120 s | `AbortSignal.timeout(120_000)` in `server/src/routes/proxy.ts` (send handler) |
+| **SSE first-byte timeout** — max time to receive the first byte from the agent on a streaming request; returns 504 if exceeded | 30 s | `CONNECT_TIMEOUT_MS` constant in `server/src/routes/proxy.ts` (stream handler) |
+| **SSE no-data watchdog** — if the stream goes silent for this long after the first byte, the connection is aborted | 60 s | `NO_DATA_TIMEOUT_MS` constant in `server/src/routes/proxy.ts` (stream handler) |
+| **Agent card fetch timeout** — per-attempt timeout when resolving the RPC URL from `/.well-known/agent.json` | 5 s | `AbortSignal.timeout(5000)` in `server/src/routes/proxy.ts` (`resolveRpcUrl`) |
+| **RPC URL cache TTL** — how long the resolved agent RPC endpoint is cached before re-reading the agent card | 5 min | `RPC_CACHE_TTL_MS` constant at the top of `server/src/routes/proxy.ts` |
+
+### Database pool (server)
+
+| Timeout | Default | Where to change |
+|---------|---------|-----------------|
+| **Connection acquire timeout** — max time to obtain a connection from the pool | 5 s | `connectionTimeoutMillis` in `server/src/db.ts` |
+| **Idle connection timeout** — how long an unused pooled connection is kept open before being closed | 30 s | `idleTimeoutMillis` in `server/src/db.ts` |
+
+### UI
+
+| Timeout | Default | Where to change |
+|---------|---------|-----------------|
+| **Error toast auto-dismiss** — how long the error banner stays visible before fading out | 6 s | `autoDismissMs` default prop in `src/components/ErrorToast.tsx` |
+
+### Infrastructure (Dockerfile)
+
+| Parameter | Value | Effect |
+|-----------|-------|--------|
+| `--interval` | 30 s | How often Cloud Run polls the health endpoint (`${BASE_PATH}/api/health`) |
+| `--timeout` | 5 s | Max time a single health check probe may take |
+| `--start-period` | 10 s | Grace period before the first health check fires |
+| `--failure-threshold` | 12 | Number of consecutive failures before the container is considered unhealthy — combined with the above, the container has up to **10 + 12 × 10 = 130 s** to become healthy |
+
+Change these in the `HEALTHCHECK` directive in `Dockerfile`.
 
 ---
 

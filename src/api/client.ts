@@ -119,6 +119,13 @@ export async function* streamChat(
     let event: Record<string, unknown>;
     try { event = JSON.parse(raw); } catch { return null; }
 
+    // Top-level error from proxy relay (e.g. "Agent stream stalled", connection dropped)
+    const topError = event['error'] as Record<string, unknown> | undefined;
+    if (topError) {
+      const msg = (topError['message'] as string | undefined) ?? 'Stream error';
+      return { parts: [{ kind: 'text', text: `⚠ ${msg}` }], context_id: currentContextId, done: true, rawEvent: event };
+    }
+
     const result = (event['result'] ?? {}) as Record<string, unknown>;
     const kind = result['kind'] as string | undefined;
     const cid = (result['contextId'] ?? result['context_id']) as string | undefined;
@@ -129,14 +136,31 @@ export async function* streamChat(
       (result['status'] as Record<string, unknown> | undefined)?.['state'] === 'completed' ||
       (result['status'] as Record<string, unknown> | undefined)?.['state'] === 'failed';
 
+    const status = (result['status'] as Record<string, unknown> | undefined);
     let outParts: Part[] = [];
+
     if (kind === 'artifact-update') {
+      // TaskArtifactUpdateEvent — content in result.artifact.parts
       const artifact = (result['artifact'] ?? {}) as Record<string, unknown>;
       outParts = ((artifact['parts'] as Record<string, unknown>[] | undefined) ?? []).map(normalizePart);
-    } else if (kind === 'message' || !kind) {
+    } else if (kind === 'status-update') {
+      // TaskStatusUpdateEvent — content optionally in result.status.message.parts
+      const msg = (status?.['message'] ?? {}) as Record<string, unknown>;
+      outParts = ((msg['parts'] as Record<string, unknown>[] | undefined) ?? []).map(normalizePart);
+      // If the task failed with no message, synthesize a visible error notice
+      if (outParts.length === 0 && status?.['state'] === 'failed') {
+        outParts = [{ kind: 'text', text: '⚠ Task failed' }];
+      }
+    } else {
+      // MessageStreamEvent (kind === 'message' or absent) and any other kind:
+      // try result.parts, result.artifacts, result.message.parts
       outParts = ((result['parts'] as Record<string, unknown>[] | undefined) ?? []).map(normalizePart);
       for (const artifact of (result['artifacts'] as Record<string, unknown>[] | undefined) ?? []) {
         outParts.push(...((artifact['parts'] as Record<string, unknown>[] | undefined) ?? []).map(normalizePart));
+      }
+      if (outParts.length === 0) {
+        const msg = (result['message'] as Record<string, unknown> | undefined);
+        outParts = ((msg?.['parts'] as Record<string, unknown>[] | undefined) ?? []).map(normalizePart);
       }
     }
 

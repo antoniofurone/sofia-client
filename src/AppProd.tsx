@@ -1,8 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { MessageList } from './components/MessageList';
 import { InputArea } from './components/InputArea';
 import { AgentCard } from './components/AgentCard';
 import { AgentSelector } from './components/AgentSelector';
+import { AgentStartupOverlay } from './components/AgentStartupOverlay';
 import { LoginForm } from './components/LoginForm';
 import { ErrorToast } from './components/ErrorToast';
 import { SettingsBar } from './components/SettingsBar';
@@ -12,6 +13,9 @@ import { useSettings } from './hooks/useSettings';
 import { fetchAgentCardProd } from './api/prodClient';
 import type { AgentCard as AgentCardType } from './types/a2a';
 import type { Part } from './types/a2a';
+
+const CONNECT_TIMEOUT_MS = 60_000;
+const CONNECT_RETRY_MS   = 5_000;
 
 export function AppProd() {
   const auth = useAuth();
@@ -25,6 +29,12 @@ export function AppProd() {
   const [showSettings, setShowSettings] = useState(false);
   const [toastError, setToastError] = useState<string | null>(null);
   const [sessionExpiredMsg, setSessionExpiredMsg] = useState<string | null>(null);
+
+  // Agent cold-start connection state
+  const [isAgentConnecting, setIsAgentConnecting] = useState(false);
+  const [connectElapsed, setConnectElapsed] = useState(0);
+  const [connectAttempt, setConnectAttempt] = useState(0);
+  const connectAbortRef = useRef<AbortController | null>(null);
 
   const showError = useCallback((msg: string) => setToastError(msg), []);
 
@@ -44,20 +54,71 @@ export function AppProd() {
   });
 
   const handleSelectAgent = useCallback(async (name: string) => {
+    // Cancel any previous connection attempt
+    connectAbortRef.current?.abort();
+    const controller = new AbortController();
+    connectAbortRef.current = controller;
+
     setSelectedAgent(name);
     setAgentCard(null);
     setShowAgentCard(false);
-    // Agent card is fetched for extra info (version, skills…) but is optional.
-    // The chip in the header appears as soon as selectedAgent is set.
+    setIsAgentConnecting(true);
+    setConnectElapsed(0);
+    setConnectAttempt(0);
+
+    const startTime = Date.now();
+
+    // Smooth progress bar ticker (updates every 250ms)
+    const ticker = setInterval(() => {
+      setConnectElapsed(Date.now() - startTime);
+    }, 250);
+
     try {
-      const card = await fetchAgentCardProd(name);
-      setAgentCard(card);
-    } catch {
-      // Not all agents expose /.well-known/agent.json — proceed without it.
+      let attempt = 0;
+      let connected = false;
+
+      while (!controller.signal.aborted) {
+        attempt++;
+        setConnectAttempt(attempt);
+        try {
+          // null = agent reachable but no card endpoint — still counts as connected
+          const card = await fetchAgentCardProd(name);
+          if (!controller.signal.aborted) {
+            if (card) setAgentCard(card);
+            connected = true;
+          }
+          break;
+        } catch {
+          const elapsed = Date.now() - startTime;
+          if (elapsed >= CONNECT_TIMEOUT_MS || controller.signal.aborted) break;
+          // Wait before next attempt, abort early if cancelled
+          await new Promise<void>(resolve => {
+            const t = setTimeout(resolve, CONNECT_RETRY_MS);
+            controller.signal.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
+          });
+        }
+      }
+
+      // Timeout expired without a response — reset to selector and surface error
+      if (!controller.signal.aborted && !connected) {
+        setSelectedAgent(null);
+        showError('Connection failed: agent did not respond within 60 seconds.');
+      }
+    } finally {
+      clearInterval(ticker);
+      if (!controller.signal.aborted) {
+        setIsAgentConnecting(false);
+        setConnectElapsed(0);
+        setConnectAttempt(0);
+      }
     }
   }, []);
 
   const handleDisconnectAgent = useCallback(() => {
+    connectAbortRef.current?.abort();
+    setIsAgentConnecting(false);
+    setConnectElapsed(0);
+    setConnectAttempt(0);
     setSelectedAgent(null);
     setAgentCard(null);
     setShowAgentCard(false);
@@ -190,13 +251,24 @@ export function AppProd() {
           <AgentCard card={agentCard} onDisconnect={handleDisconnectAgent} headerless />
         )}
 
-        <MessageList messages={messages} />
-
-        <InputArea
-          onSend={handleSend}
-          isBusy={isBusy}
-          disabled={!selectedAgent}
-        />
+        {isAgentConnecting ? (
+          <AgentStartupOverlay
+            agentName={selectedAgent!}
+            elapsed={connectElapsed}
+            timeout={CONNECT_TIMEOUT_MS}
+            attempt={connectAttempt}
+            onCancel={handleDisconnectAgent}
+          />
+        ) : (
+          <>
+            <MessageList messages={messages} />
+            <InputArea
+              onSend={handleSend}
+              isBusy={isBusy}
+              disabled={!selectedAgent}
+            />
+          </>
+        )}
       </div>
 
       <ErrorToast message={toastError} onDismiss={() => setToastError(null)} />

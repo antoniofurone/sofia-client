@@ -59,7 +59,7 @@ function extractParts(responseJson: Record<string, unknown>): Part[] {
 export async function fetchAgentCard(baseUrl: string, apiKey?: string, proxyUrl?: string, noProxy?: string): Promise<AgentCard> {
   const base = baseUrl.replace(/\/$/, '');
   for (const path of ['/.well-known/agent.json', '/.well-known/agent-card.json']) {
-    const res = await agentFetch(`${base}${path}`, {}, apiKey, proxyUrl, noProxy);
+    const res = await agentFetch(`${base}${path}`, { cache: 'no-store' }, apiKey, proxyUrl, noProxy);
     if (res.ok) {
       const card: AgentCard = await res.json();
       if (card.url && !card.url.startsWith('http')) card.url = `${base}${card.url}`;

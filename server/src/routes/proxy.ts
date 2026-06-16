@@ -218,7 +218,7 @@ router.post('/stream', requireAuth, async (req: Request, res: Response): Promise
     // CONNECT_TIMEOUT_MS : max time to receive the first byte from the agent.
     // NO_DATA_TIMEOUT_MS : if the stream goes silent for this long, we abort.
     const CONNECT_TIMEOUT_MS = 30_000;
-    const NO_DATA_TIMEOUT_MS = 60_000;
+    const NO_DATA_TIMEOUT_MS = 180_000;
 
     const controller = new AbortController();
     const connectTimer = setTimeout(() => controller.abort(new Error('Agent connection timeout')), CONNECT_TIMEOUT_MS);

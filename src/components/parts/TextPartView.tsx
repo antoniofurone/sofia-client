@@ -84,6 +84,13 @@ export function TextPartView({ part }: Props) {
       });
     });
 
+    // Add native title tooltip to every td whose content is truncated by CSS ellipsis.
+    container.querySelectorAll<HTMLTableCellElement>('td').forEach((td) => {
+      if (td.scrollWidth > td.clientWidth) {
+        td.title = td.textContent?.trim() ?? '';
+      }
+    });
+
     return () => cleanups.forEach(fn => fn());
   }, [html]);
 

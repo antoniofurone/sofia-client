@@ -3,7 +3,7 @@ import type { ChatMessage, DebugInfo, Part } from '../types/a2a';
 import { sendChatProd, streamChatProd } from '../api/prodClient';
 
 // Client-side timeout: if no SSE chunk arrives within this window, abort.
-const CLIENT_STREAM_TIMEOUT_MS = 90_000; // 90 s
+const CLIENT_STREAM_TIMEOUT_MS = 180_000; // 180 s — aligned with server proxy and Python test
 
 interface UseChatProdOptions {
   agentName: string | null;

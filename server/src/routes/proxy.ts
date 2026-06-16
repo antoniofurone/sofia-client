@@ -172,7 +172,7 @@ router.post('/send', requireAuth, async (req: Request, res: Response): Promise<v
       method: 'POST',
       headers,
       body: JSON.stringify(enriched),
-      signal: AbortSignal.timeout(120_000), // 2 min — agent must respond within this time
+      signal: AbortSignal.timeout(180_000), // 3 min — agent must respond within this time
     });
 
     const body = await upstream.json();
@@ -217,7 +217,7 @@ router.post('/stream', requireAuth, async (req: Request, res: Response): Promise
     // Abort controller shared by fetch + no-data watchdog.
     // CONNECT_TIMEOUT_MS : max time to receive the first byte from the agent.
     // NO_DATA_TIMEOUT_MS : if the stream goes silent for this long, we abort.
-    const CONNECT_TIMEOUT_MS = 30_000;
+    const CONNECT_TIMEOUT_MS = 180_000;
     const NO_DATA_TIMEOUT_MS = 180_000;
 
     const controller = new AbortController();

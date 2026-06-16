@@ -83,6 +83,7 @@ export async function sendChat(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(180_000),
   }, apiKey, proxyUrl, noProxy);
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
   const data: Record<string, unknown> = await res.json();
@@ -103,6 +104,7 @@ export async function* streamChat(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(180_000),
   }, apiKey, proxyUrl, noProxy);
 
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);

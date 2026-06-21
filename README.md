@@ -443,19 +443,28 @@ These govern the startup overlay shown when selecting an agent that may be cold-
 | **Cold-start max wait** — total time the UI waits for the agent to respond before showing "Connection failed" | 60 s | `CONNECT_TIMEOUT_MS` constant at the top of `src/AppProd.tsx` |
 | **Retry interval** — how often a new connection attempt is made while waiting | 5 s | `CONNECT_RETRY_MS` constant at the top of `src/AppProd.tsx` |
 
-### Streaming (frontend)
+### Streaming (frontend — production mode)
 
 | Timeout | Default | Where to change |
 |---------|---------|-----------------|
-| **SSE inactivity watchdog** — if no SSE chunk arrives within this window the request is aborted with "Request cancelled: agent did not respond in time" | 90 s | `CLIENT_STREAM_TIMEOUT_MS` constant at the top of `src/hooks/useChatProd.ts` |
+| **SSE inactivity watchdog** — aborts the stream if no SSE chunk is yielded to the UI within this window; surfaces as "Request cancelled: agent did not respond in time". Resets only on chunks that carry visible parts or a final status, **not** on silent keep-alive status events. | 180 s | `CLIENT_STREAM_TIMEOUT_MS` constant at the top of `src/hooks/useChatProd.ts` |
 
-### Backend proxy (server)
+### Agent calls (frontend — debug mode)
+
+In debug mode the browser calls the agent directly (via the Vite dev proxy) without an Express backend. Both timeouts apply to the native `fetch` call.
 
 | Timeout | Default | Where to change |
 |---------|---------|-----------------|
-| **Non-streaming request timeout** — max time allowed for a `message/send` round-trip | 120 s | `AbortSignal.timeout(120_000)` in `server/src/routes/proxy.ts` (send handler) |
-| **SSE first-byte timeout** — max time to receive the first byte from the agent on a streaming request; returns 504 if exceeded | 30 s | `CONNECT_TIMEOUT_MS` constant in `server/src/routes/proxy.ts` (stream handler) |
-| **SSE no-data watchdog** — if the stream goes silent for this long after the first byte, the connection is aborted | 60 s | `NO_DATA_TIMEOUT_MS` constant in `server/src/routes/proxy.ts` (stream handler) |
+| **Non-streaming request timeout** — max time for a `message/send` round-trip | 180 s | `AbortSignal.timeout(180_000)` in `sendChat` in `src/api/client.ts` |
+| **SSE request timeout** — max total time for the entire `message/stream` SSE connection | 180 s | `AbortSignal.timeout(180_000)` in `streamChat` in `src/api/client.ts` |
+
+### Backend proxy (server — production mode)
+
+| Timeout | Default | Where to change |
+|---------|---------|-----------------|
+| **Non-streaming request timeout** — max time allowed for a `message/send` round-trip | 180 s | `AbortSignal.timeout(180_000)` in `server/src/routes/proxy.ts` (send handler) |
+| **SSE first-byte timeout** — max time to receive the first byte from the agent on a streaming request; aborts with 502 if exceeded | 180 s | `CONNECT_TIMEOUT_MS` constant in `server/src/routes/proxy.ts` (stream handler) |
+| **SSE no-data watchdog** — if the stream goes silent for this long after the first byte, the connection is aborted and an error event is written to the client | 180 s | `NO_DATA_TIMEOUT_MS` constant in `server/src/routes/proxy.ts` (stream handler) |
 | **Agent card fetch timeout** — per-attempt timeout when resolving the RPC URL from `/.well-known/agent.json` | 5 s | `AbortSignal.timeout(5000)` in `server/src/routes/proxy.ts` (`resolveRpcUrl`) |
 | **RPC URL cache TTL** — how long the resolved agent RPC endpoint is cached before re-reading the agent card | 5 min | `RPC_CACHE_TTL_MS` constant at the top of `server/src/routes/proxy.ts` |
 

@@ -417,6 +417,14 @@ gcloud run deploy sofia-client-a \
   --set-env-vars "SESSION_SECRET=<secret>,DB_HOST=<host>,DB_NAME=<db>,DB_USER=<user>,DB_PASSWORD=<pw>,BASE_PATH=/a"
 ```
 
+> **Cloud Run request timeout**: `--timeout` is intentionally **not** passed here — Cloud Run keeps whatever value
+> the service already has when the flag is omitted (it only applies its own default the *first* time a service is
+> created). Checked on 2026-07-02: `sofia-client` = 800 s, `sofia-client-a` = 300 s. Both were ruled out as the
+> cause of the "stream stops after ~2 minutes" issue — the actual cutoff traced back to the *agent's* own server
+> (see the SSE section below), not to either of these services. Don't add `--timeout` to the commands above
+> without first checking the live value — passing a lower number than what's currently set would silently reduce
+> it. To check: `gcloud run services describe <service> --region europe-west8 --format="value(spec.template.spec.timeoutSeconds)"`.
+
 > **Note**: `VITE_MODE`, `VITE_AUTH_MODE` and `VITE_BASE` are **build-time** arguments baked into the image.  
 > All other variables (`BASE_PATH`, `SESSION_SECRET`, `DB_*`) are runtime env vars set in Cloud Run — never put them in the image.  
 > For `sofia-client-a`, always pass `BASE_PATH=/a` as a runtime env var to match the LB path prefix.
@@ -488,6 +496,14 @@ In debug mode the browser calls the agent directly (via the Vite dev proxy) with
 | `--interval` | 30 s | How often Cloud Run polls the health endpoint (`${BASE_PATH}/api/health`) |
 | `--timeout` | 5 s | Max time a single health check probe may take |
 | `--start-period` | 10 s | Grace period before the first health check fires |
+
+### Infrastructure (Cloud Run service — outside this repo)
+
+| Timeout | Live value (checked 2026-07-02) | Where to change |
+|---------|----------------------------------|-----------------|
+| **Request timeout** — Cloud Run kills the whole request (including an in-progress SSE stream) after this long, no matter what the app-level timeouts above say | `sofia-client` = 800 s, `sofia-client-a` = 300 s | `--timeout` flag on `gcloud run deploy` — not currently passed, so it's whatever was last configured (see note above the deploy commands) |
+
+Both values comfortably exceed the 180 s app-level SSE watchdogs, so this was **ruled out** as the cause of streams stopping after ~2 minutes even though it was the first suspect — the actual cutoff was inside the *agent's own* server (it blocks synchronously on a non-streaming sub-agent call for longer than its own worker/process timeout allows, killing the SSE connection back to sofia-client), not a Cloud Run setting on either sofia-client service.
 | `--failure-threshold` | 12 | Number of consecutive failures before the container is considered unhealthy — combined with the above, the container has up to **10 + 12 × 10 = 130 s** to become healthy |
 
 Change these in the `HEALTHCHECK` directive in `Dockerfile`.

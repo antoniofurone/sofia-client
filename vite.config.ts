@@ -81,6 +81,26 @@ function a2aProxyPlugin() {
             }
           }
 
+          const startedAt = Date.now()
+          const elapsedS = () => ((Date.now() - startedAt) / 1000).toFixed(1)
+          let chunkCount = 0
+          let bytesForwarded = 0
+          let endedNormally = false
+          console.log(`[vite-a2a-proxy] stream start target=${targetUrl}`)
+          const heartbeat = setInterval(() => {
+            console.log(`[vite-a2a-proxy] stream heartbeat target=${targetUrl} elapsed=${elapsedS()}s chunks=${chunkCount} bytes=${bytesForwarded}`)
+          }, 15_000)
+          req.on('close', () => {
+            if (!endedNormally) {
+              // Fires on any premature close of the *incoming* browser request.
+              // If this recurs at a fixed elapsed time, something between the
+              // browser and this dev server (or this dev server and the
+              // remote agent) is cutting the connection — not one of the
+              // app's own 180s watchdogs.
+              console.warn(`[vite-a2a-proxy] connection closed early target=${targetUrl} elapsed=${elapsedS()}s chunks=${chunkCount} bytes=${bytesForwarded}`)
+            }
+          })
+
           // ── Proxy path: route through the user-supplied HTTP proxy ──────────
           // Skip proxy if the target hostname is in the no_proxy list
           const parsed = new URL(targetUrl)
@@ -123,13 +143,21 @@ function a2aProxyPlugin() {
                   while (true) {
                     const { done, value } = await reader.read()
                     if (done) break
+                    chunkCount++
+                    bytesForwarded += value.byteLength
                     res.write(value)
                   }
                 }
+                endedNormally = true
+                console.log(`[vite-a2a-proxy] stream complete target=${targetUrl} elapsed=${elapsedS()}s chunks=${chunkCount} bytes=${bytesForwarded}`)
                 res.end()
               } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err)
+                console.error(`[vite-a2a-proxy] stream error target=${targetUrl} elapsed=${elapsedS()}s chunks=${chunkCount} bytes=${bytesForwarded}:`, msg)
                 if (!res.headersSent) res.writeHead(502)
-                res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }))
+                res.end(JSON.stringify({ error: msg }))
+              } finally {
+                clearInterval(heartbeat)
               }
             })()
             return
@@ -160,10 +188,21 @@ function a2aProxyPlugin() {
               if (v !== undefined) resHeaders[k] = v
             }
             res.writeHead(proxyRes.statusCode ?? 200, resHeaders)
+            proxyRes.on('data', (chunk: Buffer) => {
+              chunkCount++
+              bytesForwarded += chunk.length
+            })
+            proxyRes.on('end', () => {
+              endedNormally = true
+              clearInterval(heartbeat)
+              console.log(`[vite-a2a-proxy] stream complete target=${targetUrl} elapsed=${elapsedS()}s chunks=${chunkCount} bytes=${bytesForwarded}`)
+            })
             proxyRes.pipe(res, { end: true })
           })
 
           proxyReq.on('error', (err: Error) => {
+            clearInterval(heartbeat)
+            console.error(`[vite-a2a-proxy] stream error target=${targetUrl} elapsed=${elapsedS()}s chunks=${chunkCount} bytes=${bytesForwarded}:`, err.message)
             if (!res.headersSent) res.writeHead(502)
             res.end(JSON.stringify({ error: err.message }))
           })

@@ -17,7 +17,7 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
 app.use(sessionMiddleware);
 
 // Base path support: when deployed behind a path-based load balancer (e.g. /a),

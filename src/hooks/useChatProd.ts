@@ -92,6 +92,7 @@ export function useChatProd({ agentName, streaming, onError, onSessionExpired }:
           watchdog = setTimeout(() => controller.abort(), CLIENT_STREAM_TIMEOUT_MS);
         };
 
+        let reachedFinal = false;
         try {
           const gen = streamChatProd(agentName, parts, effectiveContextId, controller.signal);
           for await (const chunk of gen) {
@@ -103,6 +104,7 @@ export function useChatProd({ agentName, streaming, onError, onSessionExpired }:
               updateMessage(agentMsgId, m => ({ ...m, parts: [...accumulated] }));
             }
             if (chunk.done) {
+              reachedFinal = true;
               const debug: DebugInfo = { request: requestPayload, response: { events: rawEvents } };
               updateMessage(agentMsgId, m => ({ ...m, streaming: false, debug }));
               break;
@@ -110,16 +112,33 @@ export function useChatProd({ agentName, streaming, onError, onSessionExpired }:
           }
         } finally {
           clearTimeout(watchdog);
-          updateMessage(agentMsgId, m => ({
-            ...m,
-            streaming: false,
-            // If the agent completed but sent no visible parts (e.g. a pure
-            // status-update with no message/artifact payload), show a minimal
-            // notice so the bubble is never left silently empty.
-            parts: m.parts.length > 0
-              ? m.parts
-              : [{ kind: 'text', text: '_Task completed._' }],
-          }));
+          // The SSE body ended (clean EOF or our own watchdog abort) without ever
+          // sending a final status — the connection was cut somewhere between us
+          // and the agent while the task was still running. Distinguish that from
+          // a genuinely empty-but-complete response ("_Task completed._") so the
+          // user isn't left staring at a bubble that just stopped with no
+          // explanation (the previous behavior for both cases).
+          if (!reachedFinal) {
+            const errMsg = 'Connessione interrotta: l\'agente non ha inviato una risposta finale.';
+            onError?.(errMsg);
+            updateMessage(agentMsgId, m => ({
+              ...m,
+              streaming: false,
+              parts: m.parts.length > 0 ? m.parts : [{ kind: 'text', text: `⚠ ${errMsg}` }],
+              error: errMsg,
+            }));
+          } else {
+            updateMessage(agentMsgId, m => ({
+              ...m,
+              streaming: false,
+              // If the agent completed but sent no visible parts (e.g. a pure
+              // status-update with no message/artifact payload), show a minimal
+              // notice so the bubble is never left silently empty.
+              parts: m.parts.length > 0
+                ? m.parts
+                : [{ kind: 'text', text: '_Task completed._' }],
+            }));
+          }
         }
 
       } else {

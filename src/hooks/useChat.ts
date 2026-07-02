@@ -95,6 +95,7 @@ export function useChat({ agentRpcUrl, apiKey, proxyUrl, noProxy, streaming, onE
         const gen = streamChat(agentRpcUrl, parts, effectiveContextId, apiKey || undefined, proxyUrl || undefined, noProxy || undefined);
         const accumulated: Part[] = [];
         const rawEvents: Record<string, unknown>[] = [];
+        let reachedFinal = false;
 
         for await (const chunk of gen) {
           if (chunk.context_id) {
@@ -107,12 +108,28 @@ export function useChat({ agentRpcUrl, apiKey, proxyUrl, noProxy, streaming, onE
             updateMessage(agentMsgId, m => ({ ...m, parts: [...accumulated] }));
           }
           if (chunk.done) {
+            reachedFinal = true;
             const debug: DebugInfo = { request: requestPayload, response: { events: rawEvents } };
             updateMessage(agentMsgId, m => ({ ...m, streaming: false, debug }));
             break;
           }
         }
-        updateMessage(agentMsgId, m => ({ ...m, streaming: false }));
+
+        if (!reachedFinal) {
+          // The SSE body ended (clean EOF, no thrown error) without ever sending a
+          // final status — the connection was cut somewhere between us and the
+          // agent while the task was still running. Silently marking the bubble
+          // "not streaming" would leave the user staring at a message that just
+          // stopped with no explanation, so surface it as a visible error instead.
+          const errMsg = 'Connessione interrotta: l\'agente non ha inviato una risposta finale.';
+          onError?.(errMsg);
+          updateMessage(agentMsgId, m => ({
+            ...m,
+            streaming: false,
+            parts: m.parts.length > 0 ? m.parts : [{ kind: 'text', text: `⚠ ${errMsg}` }],
+            error: errMsg,
+          }));
+        }
       } else {
         const result = await sendChat(agentRpcUrl, parts, effectiveContextId, apiKey || undefined, proxyUrl || undefined, noProxy || undefined);
         if (result.context_id) {

@@ -229,6 +229,10 @@ router.post('/stream', requireAuth, async (req: Request, res: Response): Promise
       noDataTimer = setTimeout(() => controller.abort(new Error('Agent stream stalled')), NO_DATA_TIMEOUT_MS);
     };
 
+    const startedAt = Date.now();
+    const elapsedS = () => ((Date.now() - startedAt) / 1000).toFixed(1);
+    console.log(`[proxy] stream start agent=${agentName}`);
+
     const upstream = await fetch(rpcUrl, {
       method: 'POST',
       headers,
@@ -239,6 +243,7 @@ router.post('/stream', requireAuth, async (req: Request, res: Response): Promise
 
     if (!upstream.ok || !upstream.body) {
       if (noDataTimer) clearTimeout(noDataTimer);
+      console.error(`[proxy] stream upstream error agent=${agentName} status=${upstream.status} elapsed=${elapsedS()}s`);
       // Use 502 so the client can distinguish "agent returned an error" from
       // "proxy route not found" (which would be a real 404 from this server).
       res.status(502).json({ error: `Agent returned ${upstream.status}` });
@@ -251,10 +256,32 @@ router.post('/stream', requireAuth, async (req: Request, res: Response): Promise
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
+    let bytesForwarded = 0;
+    let chunkCount = 0;
+    let endedNormally = false;
+
+    // Heartbeat so a stuck/long-running stream is visible in logs while it's
+    // still in flight, not just after the fact — makes it possible to tell an
+    // app-level timeout (connect/no-data, logged separately below) apart from
+    // an external cutoff (LB/Cloud Run/proxy) that kills the connection with
+    // no error surfaced to this handler at all.
+    const heartbeat = setInterval(() => {
+      console.log(`[proxy] stream heartbeat agent=${agentName} elapsed=${elapsedS()}s chunks=${chunkCount} bytes=${bytesForwarded}`);
+    }, 30_000);
+
     const reader = upstream.body.getReader();
     req.on('close', () => {
       controller.abort();
       reader.cancel();
+      if (!endedNormally) {
+        // Fires on any premature close: client navigated away, but also on a
+        // silent cutoff imposed by something in front of this server (load
+        // balancer / Cloud Run request timeout / reverse proxy idle timeout)
+        // that isn't one of our own watchdogs. If this keeps showing up at
+        // the same elapsed time across requests, suspect the infra layer,
+        // not CONNECT_TIMEOUT_MS / NO_DATA_TIMEOUT_MS above.
+        console.warn(`[proxy] stream connection closed early agent=${agentName} elapsed=${elapsedS()}s chunks=${chunkCount} bytes=${bytesForwarded}`);
+      }
     });
 
     try {
@@ -263,17 +290,22 @@ router.post('/stream', requireAuth, async (req: Request, res: Response): Promise
         const { done, value } = await reader.read();
         if (done) break;
         resetNoDataTimer(); // reset watchdog on each chunk
+        chunkCount++;
+        bytesForwarded += value.byteLength;
         res.write(value);
       }
+      endedNormally = true;
+      console.log(`[proxy] stream complete agent=${agentName} elapsed=${elapsedS()}s chunks=${chunkCount} bytes=${bytesForwarded}`);
     } catch (streamErr) {
       // Write a JSON-RPC error event BEFORE res.end() (the finally below) so the
       // client can surface the real error instead of showing a blank "Task completed".
       const msg = streamErr instanceof Error ? streamErr.message : 'Stream error';
-      console.error(`[proxy] stream error (${agentName}):`, msg);
+      console.error(`[proxy] stream error agent=${agentName} elapsed=${elapsedS()}s chunks=${chunkCount} bytes=${bytesForwarded}:`, msg);
       if (!res.writableEnded) {
         res.write(`data: ${JSON.stringify({ error: { code: -32099, message: msg } })}\n\n`);
       }
     } finally {
+      clearInterval(heartbeat);
       if (noDataTimer) clearTimeout(noDataTimer);
       res.end();
     }

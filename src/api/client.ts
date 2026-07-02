@@ -114,6 +114,15 @@ export async function* streamChat(
   let buffer = '';
   let currentContextId = contextId ?? '';
 
+  const startedAt = Date.now();
+  const elapsedS = () => ((Date.now() - startedAt) / 1000).toFixed(1);
+  let chunkCount = 0;
+  let bytesReceived = 0;
+  console.log(`[a2a-debug] stream start url=${agentRpcUrl}`);
+  const heartbeat = setInterval(() => {
+    console.log(`[a2a-debug] stream heartbeat elapsed=${elapsedS()}s chunks=${chunkCount} bytes=${bytesReceived}`);
+  }, 15_000);
+
   const parseSseLine = (line: string) => {
     if (!line.startsWith('data:')) return null;
     const raw = line.slice(5).trim();
@@ -170,22 +179,37 @@ export async function* streamChat(
     return null;
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const blocks = buffer.split('\n\n');
-    buffer = blocks.pop() ?? '';
-    for (const block of blocks) {
-      for (const line of block.split('\n')) {
-        const parsed = parseSseLine(line);
-        if (parsed) { yield parsed; if (parsed.done) return; }
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunkCount++;
+      bytesReceived += value.byteLength;
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split('\n\n');
+      buffer = blocks.pop() ?? '';
+      for (const block of blocks) {
+        for (const line of block.split('\n')) {
+          const parsed = parseSseLine(line);
+          if (parsed) { yield parsed; if (parsed.done) return; }
+        }
       }
     }
-  }
-  for (const line of buffer.split('\n')) {
-    const parsed = parseSseLine(line);
-    if (parsed) yield parsed;
+    for (const line of buffer.split('\n')) {
+      const parsed = parseSseLine(line);
+      if (parsed) yield parsed;
+    }
+    console.log(`[a2a-debug] stream complete elapsed=${elapsedS()}s chunks=${chunkCount} bytes=${bytesReceived}`);
+  } catch (err) {
+    // Any abort (our own AbortSignal.timeout(180_000), a network drop, or a
+    // remote cutoff imposed by something between the browser and the agent)
+    // lands here. If this consistently fires around the same elapsed time,
+    // it's an external timeout, not the 180s signal above.
+    const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    console.error(`[a2a-debug] stream aborted elapsed=${elapsedS()}s chunks=${chunkCount} bytes=${bytesReceived}:`, msg);
+    throw err;
+  } finally {
+    clearInterval(heartbeat);
   }
 }
 

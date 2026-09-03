@@ -166,6 +166,9 @@ node scripts/simulate-app-login.js --caller-user-id mario.rossi --browser-url ht
 
 # Against the internal LB (path-based routing, e.g. /a)
 # --url and --browser-url both point to the LB base path
+
+set NODE_TLS_REJECT_UNAUTHORIZED=0
+
 node scripts/simulate-app-login.js ^
   --url            https://sofia-chat-dev.di.telecomitalia.it/a ^
   --browser-url    https://sofia-chat-dev.di.telecomitalia.it/a ^
@@ -175,6 +178,10 @@ node scripts/simulate-app-login.js ^
   --caller-user-id mario.rossi ^
   --caller-profile "{\"role\":\"agent\",\"tenant\":\"acme\"}"
 ```
+
+### dall'esterno per simulazioni con applicazioni esterne
+
+node scripts/simulate-app-login.js --url https://sofia-chat-dev.tisparkle.com/a --browser-url    https://sofia-chat-dev.tisparkle.com/a --app-name ai_portal --user-id ai_portal --password 100969 --caller-user-id antonio.furone --caller-profile "{\"role\":\"agent\",\"tenant\":\"acme\"}"
 
 > **Why two URLs?**  
 > In local dev Express (`:3000`) handles API calls but does **not** serve the SPA — that runs on Vite (`:5173`).  

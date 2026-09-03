@@ -22,15 +22,25 @@
  *                   In local dev use http://localhost:5173 (Vite) while --url stays :3000.
  *   --no-open       Print the URL but do NOT open the browser
  *
+ * Network / TLS behavior (v2):
+ *   - If HTTPS_PROXY / https_proxy is set in the environment, requests to https:// URLs
+ *     go through that proxy automatically (unless the host is in NO_PROXY / no_proxy).
+ *   - If it's NOT set (e.g. on internal machines that reach the target directly),
+ *     the script just connects directly — no configuration needed.
+ *   - In both cases, TLS certificate verification is relaxed ONLY for this script's
+ *     own outgoing request (rejectUnauthorized: false), to tolerate self-signed certs
+ *     on dev/internal hosts. This does NOT affect any other process, unlike setting
+ *     NODE_TLS_REJECT_UNAUTHORIZED=0 globally.
+ *
  * Examples:
  *   # Minimal — local dev
- *   node scripts/simulate-app-login.js ^
+ *   node scripts/simulate-app-login-v2.js ^
  *     --password secret ^
  *     --caller-user-id mario.rossi ^
  *     --browser-url http://localhost:5173
  *
  *   # Full options (Windows cmd)
- *   node scripts/simulate-app-login.js ^
+ *   node scripts/simulate-app-login-v2.js ^
  *     --url           http://localhost:3000 ^
  *     --browser-url   http://localhost:5173 ^
  *     --app-name      crm ^
@@ -41,12 +51,25 @@
  *
  *   # Password via env var (avoids it appearing in shell history)
  *   set SOFIA_APP_PASSWORD=secret
- *   node scripts/simulate-app-login.js --caller-user-id mario.rossi --browser-url http://localhost:5173
+ *   node scripts/simulate-app-login-v2.js --caller-user-id mario.rossi --browser-url http://localhost:5173
+ *
+ *   # Machine behind a corporate proxy (Windows cmd)
+ *   set HTTPS_PROXY=http://user:pass@proxy-host:8080
+ *   node scripts/simulate-app-login-v2.js --url https://sofia-chat-dev.tisparkle.com/a ...
+ *
+ *   # Internal machine, no proxy needed — just don't set HTTPS_PROXY, everything else is the same.
  */
 
 const { execSync } = require('child_process');
 const https = require('https');
 const http  = require('http');
+
+let HttpsProxyAgent;
+try {
+  ({ HttpsProxyAgent } = require('https-proxy-agent'));
+} catch {
+  HttpsProxyAgent = null; // fine if not installed and no proxy is ever used
+}
 
 // ── Parse CLI args ────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -92,6 +115,48 @@ if (!CALLER_USER_ID) {
   process.exit(1);
 }
 
+// ── Proxy / TLS helpers ─────────────────────────────────────────────────────
+function hostMatchesNoProxy(hostname, noProxyList) {
+  return noProxyList.some(entry => {
+    if (!entry) return false;
+    if (entry === '*') return true;
+    const e = entry.replace(/^\./, '');
+    return hostname === e || hostname.endsWith(`.${e}`);
+  });
+}
+
+function buildRequestOptions(parsedUrl) {
+  const options = { method: 'POST', headers: {} };
+
+  if (parsedUrl.protocol !== 'https:') {
+    // Plain HTTP (e.g. local dev on :3000) — nothing special needed.
+    return options;
+  }
+
+  const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy;
+  const noProxy = (process.env.NO_PROXY || process.env.no_proxy || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+
+  const shouldUseProxy = !!proxyUrl && !hostMatchesNoProxy(parsedUrl.hostname, noProxy);
+
+  if (shouldUseProxy) {
+    if (!HttpsProxyAgent) {
+      console.error('ERROR: HTTPS_PROXY is set but the "https-proxy-agent" package is not installed.');
+      console.error('  Run: npm install https-proxy-agent');
+      process.exit(1);
+    }
+    // Proxy path: tunnel through the corporate proxy, relax TLS verification
+    // for the destination's self-signed cert.
+    options.agent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
+  } else {
+    // Direct path (no proxy set / host is excluded via NO_PROXY): connect straight
+    // to the destination, still tolerating a self-signed cert.
+    options.rejectUnauthorized = false;
+  }
+
+  return options;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function postJson(url, body) {
   return new Promise((resolve, reject) => {
@@ -99,13 +164,14 @@ function postJson(url, body) {
     const parsed = new URL(url);
     const lib = parsed.protocol === 'https:' ? https : http;
 
-    const req = lib.request(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data),
-      },
-    }, (res) => {
+    const options = buildRequestOptions(parsed);
+    options.headers = {
+      ...options.headers,
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(data),
+    };
+
+    const req = lib.request(url, options, (res) => {
       let raw = '';
       res.on('data', chunk => raw += chunk);
       res.on('end', () => {
@@ -149,6 +215,8 @@ function openBrowser(url) {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(`  API URL          : ${base}`);
   console.log(`  Browser URL      : ${browserBase}`);
+  const proxyInUse = process.env.HTTPS_PROXY || process.env.https_proxy;
+  console.log(`  Proxy            : ${proxyInUse ? proxyInUse : '(none — direct connection)'}`);
   console.log('  ─────────────────────────────────────────────────────');
   console.log('  App credentials (sf_user):');
   console.log(`    app_name       : ${APP_NAME}`);

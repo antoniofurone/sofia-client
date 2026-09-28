@@ -17,7 +17,7 @@ export function AppDebug() {
   const [showAgentCard, setShowAgentCard] = useState(false);
 
   const showError = useCallback((msg: string) => setToastError(msg), []);
-  const { proxyUrl, noProxy, update } = useSettings();
+  const { proxyUrl, noProxy, theme, update } = useSettings();
   const { card, agentRpcUrl, apiKey, isConnecting, connect, disconnect } = useAgent({ onError: showError });
   const { messages, isBusy, sendParts, clearMessages } = useChat({
     agentRpcUrl, apiKey, proxyUrl, noProxy, streaming, onError: showError,
@@ -73,7 +73,13 @@ export function AppDebug() {
           />
         )}
         {showSettings && (
-          <SettingsBar proxyUrl={proxyUrl} noProxy={noProxy} onSave={(p, n) => update({ proxyUrl: p, noProxy: n })} />
+          <SettingsBar
+            proxyUrl={proxyUrl}
+            noProxy={noProxy}
+            onSave={(p, n) => update({ proxyUrl: p, noProxy: n })}
+            theme={theme}
+            onThemeChange={t => update({ theme: t })}
+          />
         )}
         {card && showAgentCard && (
           <AgentCard card={card} onDisconnect={handleDisconnect} headerless />

@@ -21,6 +21,26 @@
  *   --browser-url   Base URL opened in the browser     (default: same as --url)
  *                   In local dev use http://localhost:5173 (Vite) while --url stays :3000.
  *   --no-open       Print the URL but do NOT open the browser
+ *   --iframe        Instead of opening the app directly, open a tiny local
+ *                    "parent" page that embeds it in an <iframe>, served from
+ *                    http://127.0.0.1:<harness-port> — a DIFFERENT site than
+ *                    localhost, so the browser applies the same cross-site
+ *                    cookie rules as the real Salesforce/BCAME iframe. Use
+ *                    this to reproduce/verify the SameSite cookie issue and
+ *                    the Authorization: Bearer fallback locally, without a
+ *                    real Salesforce sandbox.
+ *   --harness-port  Port for the --iframe parent page (default: 5555)
+ *
+ * Testing the iframe path locally:
+ *   node scripts/simulate-app-login.js --browser-url http://localhost:5173 ^
+ *     --caller-user-id mario.rossi --iframe
+ *   This opens http://127.0.0.1:5555/ — a page that iframes the app. Check
+ *   DevTools > Application > Cookies to see whether sofia.sid was accepted,
+ *   and Network to see /api/agents succeed (via cookie or via the
+ *   Authorization: Bearer <sessionToken> fallback) instead of returning 401.
+ *   To also test the frame-ancestors CSP restriction, set on the server:
+ *     FRAME_ANCESTORS=http://127.0.0.1:5555
+ *   and confirm the iframe is now blocked when the port doesn't match.
  *
  * Network / TLS behavior (v2):
  *   - If HTTPS_PROXY / https_proxy is set in the environment, requests to https:// URLs
@@ -101,6 +121,8 @@ const USER_ID         = argValue('--user-id')          ?? 'app-user';
 const PASSWORD        = argValue('--password')         ?? process.env.SOFIA_APP_PASSWORD;
 const CALLER_USER_ID  = argValue('--caller-user-id');
 const NO_OPEN         = args.includes('--no-open');
+const IFRAME_MODE     = args.includes('--iframe');
+const HARNESS_PORT    = parseInt(argValue('--harness-port') ?? '5555', 10);
 
 const callerProfile = parseJson(argValue('--caller-profile'), '--caller-profile');
 
@@ -189,6 +211,37 @@ function postJson(url, body) {
   });
 }
 
+// Serves a tiny HTML page from http://127.0.0.1:<port> that embeds `embedUrl`
+// in an <iframe>. 127.0.0.1 and localhost are different "sites" as far as
+// browsers are concerned (different SameSite-cookie / frame-ancestors
+// boundary), so this reproduces the real cross-site iframe scenario
+// (Salesforce/BCAME Customer Portal embedding Sofia Chat) without needing an
+// actual external domain.
+function serveIframeHarness(port, embedUrl) {
+  const html = `<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Simulated parent portal (127.0.0.1)</title></head>
+<body style="margin:0;font-family:sans-serif;background:#222;color:#eee">
+  <div style="padding:8px 12px;background:#333;font-size:13px">
+    Simulated third-party portal — origin <code>http://127.0.0.1:${port}</code>
+    (different site than the app below) &mdash; embeds:<br/>
+    <code>${embedUrl}</code>
+  </div>
+  <div style="display:flex;justify-content:center;padding:24px;box-sizing:border-box;height:calc(100vh - 46px - 48px)">
+    <iframe src="${embedUrl}" style="width:60%;height:100%;border:2px solid #555;border-radius:8px;display:block"></iframe>
+  </div>
+</body>
+</html>`;
+
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
+  });
+
+  server.listen(port, '127.0.0.1');
+  return server;
+}
+
 function openBrowser(url) {
   const platform = process.platform;
   try {
@@ -263,6 +316,36 @@ function openBrowser(url) {
   const browserUrl = `${browserBase}/?app_token=${token}`;
 
   console.log('');
+
+  if (IFRAME_MODE) {
+    const harnessUrl = `http://127.0.0.1:${HARNESS_PORT}/`;
+    console.log('▶ Step 2 — Serve iframe harness (simulated third-party portal):');
+    console.log(`  Parent page : ${harnessUrl}`);
+    console.log(`  Iframe src  : ${browserUrl}`);
+    console.log('');
+    serveIframeHarness(HARNESS_PORT, browserUrl);
+
+    if (NO_OPEN) {
+      console.log('  (--no-open: copy the URL above and paste it in your browser)');
+    } else {
+      const opened = openBrowser(harnessUrl);
+      console.log(opened ? '  ✓ Browser opened' : '  ⚠ Could not open the browser automatically — paste the URL manually.');
+    }
+
+    console.log('');
+    console.log('  127.0.0.1 and localhost are different "sites" for the browser, so');
+    console.log('  this reproduces the real cross-site iframe scenario. Check DevTools');
+    console.log('  (Application > Cookies, Network) to see whether sofia.sid was set/sent');
+    console.log('  and whether /api/agents succeeds via cookie or via the Authorization:');
+    console.log('  Bearer <sessionToken> fallback.');
+    console.log('');
+    console.log('  The harness server stays up — press Ctrl+C here to stop it.');
+    console.log('');
+    console.log('  Note: the token is single-use and expires in 5 minutes.');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    return; // keep the process (and harness server) alive
+  }
+
   console.log('▶ Step 2 — Open browser:');
   console.log(`  ${browserUrl}`);
   console.log('');

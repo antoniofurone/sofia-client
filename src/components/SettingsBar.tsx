@@ -1,14 +1,23 @@
 import { useState, useEffect } from 'react';
+import type { Theme } from '../hooks/useSettings';
 
 interface Props {
   proxyUrl: string;
   noProxy: string;
   onSave: (proxyUrl: string, noProxy: string) => void;
+  theme: Theme;
+  onThemeChange: (theme: Theme) => void;
 }
 
 const IS_DEV = import.meta.env.DEV;
 
-export function SettingsBar({ proxyUrl, noProxy, onSave }: Props) {
+const THEME_OPTIONS: { value: Theme; label: string }[] = [
+  { value: 'dark', label: '🌙 Dark' },
+  { value: 'light', label: '☀️ Light' },
+  { value: 'system', label: '🖥️ System' },
+];
+
+export function SettingsBar({ proxyUrl, noProxy, onSave, theme, onThemeChange }: Props) {
   const [draftProxy, setDraftProxy] = useState(proxyUrl);
   const [draftNoProxy, setDraftNoProxy] = useState(noProxy);
 
@@ -28,6 +37,23 @@ export function SettingsBar({ proxyUrl, noProxy, onSave }: Props) {
 
   return (
     <div className="settings-bar">
+
+      {/* Theme */}
+      <div className="settings-row">
+        <label className="settings-label">🎨 Theme</label>
+        <div className="theme-switcher">
+          {THEME_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              className={`theme-switcher-btn ${theme === opt.value ? 'theme-switcher-btn--active' : ''}`}
+              onClick={() => onThemeChange(opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Proxy URL */}
       <div className="settings-row">

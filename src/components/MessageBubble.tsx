@@ -9,8 +9,16 @@ interface Props {
   message: ChatMessage;
 }
 
+// The request/response "{ } Debug" drawer is dev-only — hide it in
+// production builds (VITE_MODE=production) even though message.debug is
+// still populated there (useChatProd attaches it the same way useChat does).
+const SHOW_DEBUG_DRAWER = (import.meta.env.VITE_MODE as string | undefined) !== 'production';
+
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // Include seconds: request/response usually land in the same minute, and
+  // without seconds their displayed time looks identical even though the
+  // underlying timestamps differ.
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 /** DataParts collapsible — hidden by default */
@@ -80,7 +88,7 @@ export function MessageBubble({ message }: Props) {
 
       <span className="msg-time">{formatTime(message.timestamp)}</span>
 
-      {!isUser && message.debug && <DebugDrawer debug={message.debug} />}
+      {!isUser && message.debug && SHOW_DEBUG_DRAWER && <DebugDrawer debug={message.debug} />}
     </div>
   );
 

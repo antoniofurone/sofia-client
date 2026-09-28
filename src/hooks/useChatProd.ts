@@ -118,6 +118,11 @@ export function useChatProd({ agentName, streaming, onError, onSessionExpired }:
           // a genuinely empty-but-complete response ("_Task completed._") so the
           // user isn't left staring at a bubble that just stopped with no
           // explanation (the previous behavior for both cases).
+          // Both branches re-stamp the timestamp to when the response actually
+          // finished, instead of leaving the one set when the streaming
+          // placeholder was created (right after the request, before any
+          // response arrived) — otherwise request and response show the same
+          // displayed time even though they aren't.
           if (!reachedFinal) {
             const errMsg = 'Connessione interrotta: l\'agente non ha inviato una risposta finale.';
             onError?.(errMsg);
@@ -126,6 +131,7 @@ export function useChatProd({ agentName, streaming, onError, onSessionExpired }:
               streaming: false,
               parts: m.parts.length > 0 ? m.parts : [{ kind: 'text', text: `⚠ ${errMsg}` }],
               error: errMsg,
+              timestamp: new Date(),
             }));
           } else {
             updateMessage(agentMsgId, m => ({
@@ -137,6 +143,7 @@ export function useChatProd({ agentName, streaming, onError, onSessionExpired }:
               parts: m.parts.length > 0
                 ? m.parts
                 : [{ kind: 'text', text: '_Task completed._' }],
+              timestamp: new Date(),
             }));
           }
         }

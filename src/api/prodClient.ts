@@ -1,6 +1,7 @@
 import type { Part } from '../types/a2a';
 import { normalizePart, extractContextId, jsonRpcPayload, buildMessage } from './clientUtils';
 import { apiBase } from './apiBase';
+import { apiFetch } from './apiFetch';
 
 // ---------------------------------------------------------------------------
 // Production API client — routes all A2A traffic through the Express backend.
@@ -13,9 +14,8 @@ export async function sendChatProd(
   contextId?: string,
 ): Promise<{ parts: Part[]; context_id: string; debug: { request: Record<string, unknown>; response: Record<string, unknown> } }> {
   const payload = jsonRpcPayload('message/send', buildMessage(parts, contextId));
-  const res = await fetch(`${apiBase}/api/proxy/send`, {
+  const res = await apiFetch(`${apiBase}/api/proxy/send`, {
     method: 'POST',
-    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agentName, payload }),
   });
@@ -41,9 +41,8 @@ export async function* streamChatProd(
   signal?: AbortSignal,
 ): AsyncGenerator<{ parts: Part[]; context_id: string; done: boolean; rawEvent?: Record<string, unknown> }> {
   const payload = jsonRpcPayload('message/stream', buildMessage(parts, contextId));
-  const res = await fetch(`${apiBase}/api/proxy/stream`, {
+  const res = await apiFetch(`${apiBase}/api/proxy/stream`, {
     method: 'POST',
-    credentials: 'include',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     body: JSON.stringify({ agentName, payload }),
     signal,
@@ -141,9 +140,7 @@ export async function* streamChatProd(
 // Returns the agent card, or null if the agent is reachable but exposes no card (404).
 // Throws on network errors or 5xx — used by the startup overlay to detect cold-start.
 export async function fetchAgentCardProd(agentName: string): Promise<import('../types/a2a').AgentCard | null> {
-  const res = await fetch(`${apiBase}/api/proxy/card?agentName=${encodeURIComponent(agentName)}`, {
-    credentials: 'include',
-  });
+  const res = await apiFetch(`${apiBase}/api/proxy/card?agentName=${encodeURIComponent(agentName)}`);
   if (res.status === 404) return null; // agent is up but doesn't expose a card — that's fine
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();

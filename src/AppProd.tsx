@@ -19,7 +19,7 @@ const CONNECT_RETRY_MS   = 5_000;
 
 export function AppProd() {
   const auth = useAuth();
-  const { proxyUrl, noProxy, update } = useSettings();
+  const { proxyUrl, noProxy, theme, update } = useSettings();
 
   const [streaming, setStreaming] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
@@ -158,6 +158,19 @@ export function AppProd() {
     );
   }
 
+  // ── app_token → session exchange failed (app-to-app mode) ─────────────────
+  if (auth.authMode === 'app' && !auth.authenticated && auth.exchangeError) {
+    return (
+      <div className="login-overlay">
+        <div className="login-card" style={{ textAlign: 'center', gap: 16 }}>
+          <span style={{ fontSize: 32 }}>⚠</span>
+          <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Unable to sign in</p>
+          <p style={{ fontSize: 14, color: 'var(--muted)' }}>{auth.exchangeError}</p>
+        </div>
+      </div>
+    );
+  }
+
   // The chip label: prefer agentCard.name (pretty name from agent), fall back to selectedAgent key
   const chipLabel = agentCard?.name ?? selectedAgent;
   const chipVersion = agentCard?.version;
@@ -243,6 +256,8 @@ export function AppProd() {
             proxyUrl={proxyUrl}
             noProxy={noProxy}
             onSave={(p, n) => update({ proxyUrl: p, noProxy: n })}
+            theme={theme}
+            onThemeChange={t => update({ theme: t })}
           />
         )}
 

@@ -110,7 +110,11 @@ export function useChat({ agentRpcUrl, apiKey, proxyUrl, noProxy, streaming, onE
           if (chunk.done) {
             reachedFinal = true;
             const debug: DebugInfo = { request: requestPayload, response: { events: rawEvents } };
-            updateMessage(agentMsgId, m => ({ ...m, streaming: false, debug }));
+            // Re-stamp the timestamp here instead of leaving the one set when the
+            // streaming placeholder was created (right after the request, before
+            // any response arrived) — otherwise request and response show the
+            // same displayed time even though they aren't.
+            updateMessage(agentMsgId, m => ({ ...m, streaming: false, debug, timestamp: new Date() }));
             break;
           }
         }
@@ -128,6 +132,7 @@ export function useChat({ agentRpcUrl, apiKey, proxyUrl, noProxy, streaming, onE
             streaming: false,
             parts: m.parts.length > 0 ? m.parts : [{ kind: 'text', text: `⚠ ${errMsg}` }],
             error: errMsg,
+            timestamp: new Date(),
           }));
         }
       } else {

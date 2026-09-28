@@ -3,6 +3,8 @@ import path from 'path';
 import cors from 'cors';
 import { config } from './config';
 import { sessionMiddleware } from './middleware/session';
+import { bearerAuth } from './middleware/bearerAuth';
+import { securityHeaders } from './middleware/securityHeaders';
 import authRouter from './routes/auth';
 import agentsRouter from './routes/agents';
 import proxyRouter from './routes/proxy';
@@ -18,6 +20,11 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '50mb' }));
+app.use(securityHeaders);
+// bearerAuth must run before sessionMiddleware: it translates a Bearer token
+// (used when the cookie can't survive a cross-site iframe) into the signed
+// cookie express-session expects, so everything downstream stays unchanged.
+app.use(bearerAuth);
 app.use(sessionMiddleware);
 
 // Base path support: when deployed behind a path-based load balancer (e.g. /a),

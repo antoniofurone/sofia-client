@@ -57,9 +57,19 @@ export function InputArea({ onSend, isBusy, disabled }: Props) {
   };
 
   const handleTextKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+    if (e.key !== 'Enter') return;
+
+    if (e.shiftKey) return; // let the textarea insert a newline as usual
+
+    e.preventDefault();
+    if (e.altKey) {
+      // Alt+Enter: stage the text as a pending part without sending (old
+      // plain-Enter behavior) — lets you build a multi-part message (text +
+      // files + data) before sending it all together.
       handleAddText();
+    } else {
+      // Enter: send immediately (same as clicking "Send ➤").
+      handleSend();
     }
   };
 
@@ -208,7 +218,7 @@ export function InputArea({ onSend, isBusy, disabled }: Props) {
           <div className="text-input-wrap">
             <textarea
               className="text-input"
-              placeholder="Type a message… (Enter to add, Shift+Enter for new line)"
+              placeholder="Type a message… (Enter to send, Shift+Enter for new line, Alt+Enter to stage)"
               value={textValue}
               onChange={e => setTextValue(e.target.value)}
               onKeyDown={handleTextKeyDown}

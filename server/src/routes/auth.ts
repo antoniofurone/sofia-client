@@ -69,8 +69,15 @@ router.post('/app-login', async (req: Request, res: Response): Promise<void> => 
 
 // ---------------------------------------------------------------------------
 // GET /api/auth/exchange?app_token=<token>
-// Browser-side: exchanges a one-time app token for a session cookie.
+// Browser-side: exchanges a one-time app token for a session.
 // Called by the SPA on initial load when ?app_token is in the URL.
+//
+// Returns `sessionToken` (the session id) alongside the usual Set-Cookie.
+// Same-site contexts can just rely on the cookie as before; a cross-site
+// iframe embed (where the browser refuses to persist that cookie) instead
+// keeps `sessionToken` in memory/sessionStorage and sends it back as
+// `Authorization: Bearer <sessionToken>` on every subsequent call — see
+// server/src/middleware/bearerAuth.ts.
 // ---------------------------------------------------------------------------
 router.get('/exchange', async (req: Request, res: Response): Promise<void> => {
   if (config.AUTH_MODE !== 'app') {
@@ -120,7 +127,7 @@ router.get('/exchange', async (req: Request, res: Response): Promise<void> => {
     req.session.lastActivity  = Date.now();
     req.session.authMode      = 'app';
 
-    res.json({ ok: true, userId: caller_user_id, appName: app_name });
+    res.json({ ok: true, userId: caller_user_id, appName: app_name, sessionToken: req.sessionID });
   } catch (err) {
     console.error('[auth] exchange error:', err);
     res.status(500).json({ error: 'Internal server error' });

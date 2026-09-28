@@ -52,6 +52,7 @@ cp .env.example .env
 | `BASE_PATH` | `` \| `/a` | Runtime base path prefix. Set to the same path as `VITE_BASE` (without trailing slash). Required when behind a path-based load balancer. |
 | `SESSION_SECRET` | random string | Required when `VITE_AUTH_MODE` ≠ `none`. |
 | `SESSION_TIMEOUT_MINUTES` | `30` | Inactivity session timeout. |
+| `FRAME_ANCESTORS` | space-separated origins | Who may embed the app in an `<iframe>` (CSP `frame-ancestors`). Empty/unset (default) = no restriction, any site can embed the app. Set to restrict to known integrator origins, e.g. a Salesforce Customer Portal domain — see `server/src/middleware/securityHeaders.ts`. |
 | `DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD` | — | PostgreSQL connection (production only). |
 
 > `VITE_*` variables are **build-time** — they are compiled into the JavaScript bundle by Vite. Runtime variables (`BASE_PATH`, `DB_*`, `SESSION_SECRET`, `PORT`) are read by the Express server at startup.
@@ -116,7 +117,11 @@ App-to-app authentication. Two identities are involved:
    https://sofia.example.com/?app_token=<token>
    ```
 
-3. Sofia exchanges the token for a session cookie. The token is single-use and expires in 5 minutes.
+3. Sofia exchanges the token for a session. The token is single-use and expires in 5 minutes.
+
+**Cross-site iframe embeds** (e.g. the app loaded inside an `<iframe>` from a third-party portal, such as a Salesforce Customer Portal): browsers refuse to persist/send the `sofia.sid` session cookie in that context. To keep working there, step 3's response also returns `sessionToken` (the session id); the SPA keeps it in memory/`sessionStorage` and sends it back as `Authorization: Bearer <sessionToken>` on every subsequent `/api/*` call instead of relying on the cookie (see `server/src/middleware/bearerAuth.ts` and `src/api/apiFetch.ts`). Same-site/standalone use is unaffected — it keeps working via the cookie exactly as before.
+
+Who is allowed to embed the app in an iframe is controlled by `FRAME_ANCESTORS` (see [Key variables](#key-variables)).
 
 **What agents receive in every message:**
 ```json
@@ -178,6 +183,27 @@ node scripts/simulate-app-login.js ^
   --caller-user-id mario.rossi ^
   --caller-profile "{\"role\":\"agent\",\"tenant\":\"acme\"}"
 ```
+
+##### Simulate a cross-site iframe embed locally (`--iframe`)
+
+To reproduce/verify the third-party iframe scenario (e.g. the Salesforce/BCAME Customer Portal embedding the app) without a real external domain, add `--iframe`:
+
+```bash
+node scripts/simulate-app-login.js ^
+  --browser-url http://localhost:5173 ^
+  --caller-user-id mario.rossi ^
+  --iframe
+```
+
+Instead of opening the app directly, this starts a tiny local server on `http://127.0.0.1:5555/` (change the port with `--harness-port`) that serves a page embedding the app in a centered `<iframe>`, and opens that page. `127.0.0.1` and `localhost` are different "sites" as far as the browser is concerned, so the exact same cross-site cookie rules apply as with a real third-party domain — this reliably reproduces the cookie being blocked, and lets you verify the `Authorization: Bearer` fallback picks it up instead.
+
+What to check in DevTools once it opens:
+- **Application → Cookies**: whether `sofia.sid` was set/sent for the iframe's origin.
+- **Network → `/api/agents`**: should be `200`; inspect the request headers to see whether it succeeded via the cookie or via `Authorization: Bearer <sessionToken>`.
+
+To also test the `FRAME_ANCESTORS` restriction, start the server with `FRAME_ANCESTORS=http://127.0.0.1:5555` and confirm the iframe loads; change `--harness-port` without updating `FRAME_ANCESTORS` and confirm the browser now blocks it (CSP violation in the console).
+
+The harness server keeps running until you stop it with `Ctrl+C` in that terminal. The token itself is still single-use and expires in 5 minutes, so re-run the command for a fresh attempt.
 
 ### dall'esterno per simulazioni con applicazioni esterne
 

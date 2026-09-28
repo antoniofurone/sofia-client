@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiBase } from '../api/apiBase';
+import { apiFetch } from '../api/apiFetch';
+import { setSessionToken } from '../api/sessionToken';
 
 export interface AuthState {
   loading: boolean;
@@ -9,6 +11,11 @@ export interface AuthState {
   profile: Record<string, unknown> | null;
   authMode: 'none' | 'app' | 'user';
   mode: 'debug' | 'production';
+  // Set when the app_token → session exchange itself failed (e.g. invalid/
+  // expired app_token, or a network error). Distinct from a plain "not
+  // authenticated yet" state so the app-mode UI can show a real error
+  // instead of silently looking empty.
+  exchangeError: string | null;
 }
 
 const INITIAL: AuthState = {
@@ -19,6 +26,7 @@ const INITIAL: AuthState = {
   profile: null,
   authMode: 'none',
   mode: 'debug',
+  exchangeError: null,
 };
 
 export function useAuth() {
@@ -26,7 +34,7 @@ export function useAuth() {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch(`${apiBase}/api/auth/me`, { credentials: 'include' });
+      const res = await apiFetch(`${apiBase}/api/auth/me`);
       if (res.ok) {
         const data = await res.json();
         setState({
@@ -37,6 +45,7 @@ export function useAuth() {
           profile: data.profile ?? null,
           authMode: data.authMode,
           mode: data.mode,
+          exchangeError: null,
         });
       } else {
         const data = await res.json().catch(() => ({}));
@@ -61,15 +70,28 @@ export function useAuth() {
     const appToken = url.searchParams.get('app_token');
 
     if (appToken) {
-      // Exchange one-time token for a session cookie
-      fetch(`${apiBase}/api/auth/exchange?app_token=${encodeURIComponent(appToken)}`, { credentials: 'include' })
-        .then(() => {
-          // Clean token from URL without adding to history
+      // Exchange one-time token for a session. The response sets the
+      // sofia.sid cookie (works for same-site/standalone use, unchanged)
+      // AND returns sessionToken (used as a Bearer fallback so this also
+      // works when the cookie can't survive a cross-site iframe embed).
+      apiFetch(`${apiBase}/api/auth/exchange?app_token=${encodeURIComponent(appToken)}`)
+        .then(async res => {
+          // Clean token from URL without adding to history — it's one-time
+          // and already consumed server-side regardless of outcome.
           url.searchParams.delete('app_token');
           window.history.replaceState({}, '', url.toString());
+
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            setState(s => ({ ...s, loading: false, exchangeError: data.error ?? `HTTP ${res.status}` }));
+            return;
+          }
+
+          const data = await res.json().catch(() => ({}));
+          if (data.sessionToken) setSessionToken(data.sessionToken);
           return refresh();
         })
-        .catch(() => refresh());
+        .catch(() => setState(s => ({ ...s, loading: false, exchangeError: 'Network error' })));
     } else {
       refresh();
     }
@@ -77,9 +99,8 @@ export function useAuth() {
 
   const login = useCallback(async (userId: string, password: string): Promise<string | null> => {
     try {
-      const res = await fetch(`${apiBase}/api/auth/login`, {
+      const res = await apiFetch(`${apiBase}/api/auth/login`, {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, password }),
       });
@@ -95,7 +116,8 @@ export function useAuth() {
   }, [refresh]);
 
   const logout = useCallback(async () => {
-    await fetch(`${apiBase}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+    await apiFetch(`${apiBase}/api/auth/logout`, { method: 'POST' });
+    setSessionToken(null);
     setState(s => ({ ...s, authenticated: false, userId: null, profile: null }));
   }, []);
 

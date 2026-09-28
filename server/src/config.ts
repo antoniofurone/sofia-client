@@ -31,6 +31,13 @@ export const config = {
   SESSION_SECRET: rawMode === 'production' ? required('SESSION_SECRET') : 'dev-secret-not-for-production',
   SESSION_TIMEOUT_MS: parseInt(optional('SESSION_TIMEOUT_MINUTES', '30'), 10) * 60 * 1000,
 
+  // Space-separated list of origins allowed to embed this app in an <iframe>
+  // (CSP frame-ancestors). Empty/unset (default) = no restriction, any site
+  // can embed the app. Set to restrict embedding to specific origins once
+  // known — see server/src/middleware/securityHeaders.ts for the tradeoff.
+  // e.g. FRAME_ANCESTORS="https://bcame-portal.my.site.com https://*.force.com"
+  FRAME_ANCESTORS: optional('FRAME_ANCESTORS', ''),
+
   DB_HOST: optional('DB_HOST', 'localhost'),
   DB_PORT: parseInt(optional('DB_PORT', '5432'), 10),
   DB_NAME: optional('DB_NAME', 'sofia'),

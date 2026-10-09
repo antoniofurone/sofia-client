@@ -2,14 +2,18 @@ import { useState, useEffect } from 'react';
 import { apiBase } from '../api/apiBase';
 import { apiFetch } from '../api/apiFetch';
 
-interface AgentOption {
+export interface AgentOption {
   agent_name: string;
   url: string;
+  intro_enabled?: boolean;
+  intro_message?: string | null;
+  show_tools?: boolean;
+  show_suggestions?: boolean;
 }
 
 interface Props {
   selectedAgent: string | null;
-  onSelect: (agentName: string) => void;
+  onSelect: (agentName: string, agent?: AgentOption) => void;
   disabled?: boolean;
 }
 
@@ -24,7 +28,7 @@ export function AgentSelector({ selectedAgent, onSelect, disabled }: Props) {
       .then((data: AgentOption[]) => {
         setAgents(data);
         // Auto-select if only one agent
-        if (data.length === 1 && !selectedAgent) onSelect(data[0].agent_name);
+        if (data.length === 1 && !selectedAgent) onSelect(data[0].agent_name, data[0]);
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
@@ -41,7 +45,7 @@ export function AgentSelector({ selectedAgent, onSelect, disabled }: Props) {
         id="agent-select"
         className="agent-selector-select"
         value={selectedAgent ?? ''}
-        onChange={e => onSelect(e.target.value)}
+        onChange={e => onSelect(e.target.value, agents.find(a => a.agent_name === e.target.value))}
         disabled={disabled}
       >
         {!selectedAgent && <option value="" disabled>Select an agent…</option>}

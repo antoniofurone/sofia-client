@@ -38,6 +38,15 @@ export const config = {
   // e.g. FRAME_ANCESTORS="https://bcame-portal.my.site.com https://*.force.com"
   FRAME_ANCESTORS: optional('FRAME_ANCESTORS', ''),
 
+  // Suggested follow-up actions (LLM). Same env names used by Google ADK agents:
+  //   GOOGLE_GENAI_USE_VERTEXAI=true  → Vertex AI (GOOGLE_CLOUD_PROJECT/LOCATION + ADC)
+  //   otherwise                       → Gemini API key (GOOGLE_API_KEY)
+  GOOGLE_GENAI_USE_VERTEXAI: /^(true|1)$/i.test(optional('GOOGLE_GENAI_USE_VERTEXAI', 'false')),
+  GOOGLE_CLOUD_PROJECT: optional('GOOGLE_CLOUD_PROJECT', ''),
+  GOOGLE_CLOUD_LOCATION: optional('GOOGLE_CLOUD_LOCATION', ''),
+  GOOGLE_API_KEY: optional('GOOGLE_API_KEY', ''),
+  SUGGESTIONS_MODEL: optional('SUGGESTIONS_MODEL', optional('AGENT_MODEL', 'gemini-3.5-flash')).trim(),
+
   DB_HOST: optional('DB_HOST', 'localhost'),
   DB_PORT: parseInt(optional('DB_PORT', '5432'), 10),
   DB_NAME: optional('DB_NAME', 'sofia'),

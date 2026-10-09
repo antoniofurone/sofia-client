@@ -15,7 +15,8 @@ interface UseChatProdOptions {
 interface UseChatProdReturn {
   messages: ChatMessage[];
   isBusy: boolean;
-  sendParts: (parts: Part[]) => Promise<void>;
+  // silent: don't show the outgoing message as a user bubble (used for the automatic intro)
+  sendParts: (parts: Part[], opts?: { silent?: boolean }) => Promise<void>;
   clearMessages: () => void;
 }
 
@@ -63,7 +64,7 @@ export function useChatProd({ agentName, streaming, onError, onSessionExpired }:
     }
   }, [onError, onSessionExpired]);
 
-  const sendParts = useCallback(async (parts: Part[]) => {
+  const sendParts = useCallback(async (parts: Part[], opts?: { silent?: boolean }) => {
     if (!agentName || isBusy) return;
 
     // Cancel any previous in-flight request
@@ -73,7 +74,7 @@ export function useChatProd({ agentName, streaming, onError, onSessionExpired }:
 
     const effectiveContextId = contextIdRef.current ?? sessionId.current;
     const userMsg: ChatMessage = { id: generateId(), role: 'user', parts, timestamp: new Date() };
-    addMessage(userMsg);
+    if (!opts?.silent) addMessage(userMsg);
     setIsBusy(true);
 
     try {

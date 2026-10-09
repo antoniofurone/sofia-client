@@ -137,6 +137,24 @@ export async function* streamChatProd(
   }
 }
 
+// Best-effort: follow-up actions generated server-side from the agent's response text.
+export async function fetchSuggestions(
+  agentName: string | undefined,
+  userMessage: string,
+  agentMessage: string,
+  signal?: AbortSignal,
+): Promise<import('../utils/suggestions').Suggestion[]> {
+  const res = await apiFetch(`${apiBase}/api/suggestions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentName, userMessage, agentMessage }),
+    signal,
+  });
+  if (!res.ok) return [];
+  const data = await res.json().catch(() => ({}));
+  return Array.isArray(data.items) ? data.items : [];
+}
+
 // Returns the agent card, or null if the agent is reachable but exposes no card (404).
 // Throws on network errors or 5xx — used by the startup overlay to detect cold-start.
 export async function fetchAgentCardProd(agentName: string): Promise<import('../types/a2a').AgentCard | null> {

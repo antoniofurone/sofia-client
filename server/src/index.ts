@@ -8,6 +8,7 @@ import { securityHeaders } from './middleware/securityHeaders';
 import authRouter from './routes/auth';
 import agentsRouter from './routes/agents';
 import proxyRouter from './routes/proxy';
+import suggestionsRouter from './routes/suggestions';
 
 const app = express();
 
@@ -35,6 +36,7 @@ const bp = config.BASE_PATH; // e.g. '/a' or ''
 app.use(`${bp}/api/auth`, authRouter);
 app.use(`${bp}/api/agents`, agentsRouter);
 app.use(`${bp}/api/proxy`, proxyRouter);
+app.use(`${bp}/api/suggestions`, suggestionsRouter);
 
 // Health check
 app.get(`${bp}/api/health`, (_req, res) => res.json({ ok: true, mode: config.MODE }));

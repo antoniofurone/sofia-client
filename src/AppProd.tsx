@@ -1,14 +1,15 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { MessageList } from './components/MessageList';
 import { InputArea } from './components/InputArea';
 import { AgentCard } from './components/AgentCard';
-import { AgentSelector } from './components/AgentSelector';
+import { AgentSelector, type AgentOption } from './components/AgentSelector';
 import { AgentStartupOverlay } from './components/AgentStartupOverlay';
 import { LoginForm } from './components/LoginForm';
 import { ErrorToast } from './components/ErrorToast';
 import { SettingsBar } from './components/SettingsBar';
 import { useAuth } from './hooks/useAuth';
 import { useChatProd } from './hooks/useChatProd';
+import { useSuggestions } from './hooks/useSuggestions';
 import { useSettings } from './hooks/useSettings';
 import { fetchAgentCardProd } from './api/prodClient';
 import type { AgentCard as AgentCardType } from './types/a2a';
@@ -16,6 +17,7 @@ import type { Part } from './types/a2a';
 
 const CONNECT_TIMEOUT_MS = 60_000;
 const CONNECT_RETRY_MS   = 5_000;
+const DEFAULT_INTRO_MESSAGE = 'Please introduce yourself.';
 
 export function AppProd() {
   const auth = useAuth();
@@ -53,7 +55,27 @@ export function AppProd() {
     onSessionExpired: handleSessionExpired,
   });
 
-  const handleSelectAgent = useCallback(async (name: string) => {
+  // Tool-call visibility: initial value from sf_agents_config.show_tools, then user-toggleable
+  const [showTools, setShowTools] = useState(true);
+  // Suggested-action chips: same pattern (sf_agents_config.show_suggestions)
+  const [showSuggestions, setShowSuggestions] = useState(true);
+
+  // Intro message to auto-send once the agent is connected (set by handleSelectAgent)
+  const [pendingIntro, setPendingIntro] = useState<string | null>(null);
+  useEffect(() => {
+    if (pendingIntro && selectedAgent && !isAgentConnecting && !isBusy) {
+      const text = pendingIntro;
+      setPendingIntro(null);
+      void sendParts([{ kind: 'text', text }], { silent: true });
+    }
+  }, [pendingIntro, selectedAgent, isAgentConnecting, isBusy, sendParts]);
+
+  const suggestions = useSuggestions({ messages, isBusy, enabled: showSuggestions && !!selectedAgent && !isAgentConnecting, agentName: selectedAgent });
+
+  const handleSelectAgent = useCallback(async (name: string, agent?: AgentOption) => {
+    setPendingIntro(null);
+    setShowTools(agent?.show_tools ?? true);
+    setShowSuggestions(agent?.show_suggestions ?? true);
     // Cancel any previous connection attempt
     connectAbortRef.current?.abort();
     const controller = new AbortController();
@@ -86,6 +108,9 @@ export function AppProd() {
           if (!controller.signal.aborted) {
             if (card) setAgentCard(card);
             connected = true;
+            if (agent?.intro_enabled) {
+              setPendingIntro(agent.intro_message?.trim() || DEFAULT_INTRO_MESSAGE);
+            }
           }
           break;
         } catch {
@@ -122,6 +147,7 @@ export function AppProd() {
     setSelectedAgent(null);
     setAgentCard(null);
     setShowAgentCard(false);
+    setPendingIntro(null);
   }, []);
 
   const handleSend = async (parts: Part[]) => { await sendParts(parts); };
@@ -258,6 +284,10 @@ export function AppProd() {
             onSave={(p, n) => update({ proxyUrl: p, noProxy: n })}
             theme={theme}
             onThemeChange={t => update({ theme: t })}
+            showTools={showTools}
+            onShowToolsChange={setShowTools}
+            showSuggestions={showSuggestions}
+            onShowSuggestionsChange={setShowSuggestions}
           />
         )}
 
@@ -276,7 +306,12 @@ export function AppProd() {
           />
         ) : (
           <>
-            <MessageList messages={messages} />
+            <MessageList
+              messages={messages}
+              showTools={showTools}
+              suggestions={suggestions}
+              onSuggestion={text => { void sendParts([{ kind: 'text', text }]); }}
+            />
             <InputArea
               onSend={handleSend}
               isBusy={isBusy}

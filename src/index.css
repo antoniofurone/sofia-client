@@ -1933,3 +1933,25 @@ body {
   .connect-form { flex-wrap: wrap; }
   .connect-input-wrap { min-width: 0; flex: 1 1 100%; }
 }
+
+/* ── Suggested actions ───────────────────────────────────────────────── */
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.suggestion-chip {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent, var(--text));
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.suggestion-chip:hover {
+  background: var(--surface2);
+  border-color: var(--accent, var(--border));
+}

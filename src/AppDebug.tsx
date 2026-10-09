@@ -7,6 +7,7 @@ import { ErrorToast } from './components/ErrorToast';
 import { SettingsBar } from './components/SettingsBar';
 import { useAgent } from './hooks/useAgent';
 import { useChat } from './hooks/useChat';
+import { useSuggestions } from './hooks/useSuggestions';
 import { useSettings } from './hooks/useSettings';
 import type { Part } from './types/a2a';
 
@@ -22,6 +23,9 @@ export function AppDebug() {
   const { messages, isBusy, sendParts, clearMessages } = useChat({
     agentRpcUrl, apiKey, proxyUrl, noProxy, streaming, onError: showError,
   });
+
+  // Debug mode: suggestions always on (needs the Express backend; silently no chips otherwise)
+  const suggestions = useSuggestions({ messages, isBusy, enabled: !!card });
 
   const handleConnect = (url: string, key: string) => connect(url, key, proxyUrl || undefined, noProxy || undefined);
   const handleDisconnect = () => { disconnect(); setShowAgentCard(false); };
@@ -84,7 +88,11 @@ export function AppDebug() {
         {card && showAgentCard && (
           <AgentCard card={card} onDisconnect={handleDisconnect} headerless />
         )}
-        <MessageList messages={messages} />
+        <MessageList
+          messages={messages}
+          suggestions={suggestions}
+          onSuggestion={text => { void sendParts([{ kind: 'text', text }]); }}
+        />
         <InputArea onSend={handleSend} isBusy={isBusy} disabled={!agentRpcUrl} />
       </div>
 

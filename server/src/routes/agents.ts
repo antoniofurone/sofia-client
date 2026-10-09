@@ -13,19 +13,20 @@ const router = Router();
 // ---------------------------------------------------------------------------
 router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    let rows: { agent_name: string; url: string }[];
+    type Row = { agent_name: string; url: string; intro_enabled: boolean; intro_message: string | null; show_tools: boolean; show_suggestions: boolean };
+    let rows: Row[];
 
     if (config.AUTH_MODE === 'none') {
-      const result = await pool.query<{ agent_name: string; url: string }>(
-        'SELECT agent_name, url FROM sf_agents_config ORDER BY agent_name'
+      const result = await pool.query<Row>(
+        'SELECT agent_name, url, intro_enabled, intro_message, show_tools, show_suggestions FROM sf_agents_config ORDER BY agent_name'
       );
       rows = result.rows;
     } else {
       // Both app and user mode: session.userId is the identity for access checks.
       // app mode  → session.userId = caller_user_id
       // user mode → session.userId = login user_id
-      const result = await pool.query<{ agent_name: string; url: string }>(
-        `SELECT c.agent_name, c.url
+      const result = await pool.query<Row>(
+        `SELECT c.agent_name, c.url, c.intro_enabled, c.intro_message, c.show_tools, c.show_suggestions
          FROM sf_agents_config c
          JOIN sf_agents_access a ON a.agent_name = c.agent_name
          WHERE a.user_id = $1

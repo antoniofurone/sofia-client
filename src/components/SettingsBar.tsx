@@ -7,6 +7,12 @@ interface Props {
   onSave: (proxyUrl: string, noProxy: string) => void;
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
+  /** Tool-call visibility toggle (production only): row hidden when not provided */
+  showTools?: boolean;
+  onShowToolsChange?: (show: boolean) => void;
+  /** Suggested-action chips toggle (production only) */
+  showSuggestions?: boolean;
+  onShowSuggestionsChange?: (show: boolean) => void;
 }
 
 const IS_DEV = import.meta.env.DEV;
@@ -17,7 +23,7 @@ const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'system', label: '🖥️ System' },
 ];
 
-export function SettingsBar({ proxyUrl, noProxy, onSave, theme, onThemeChange }: Props) {
+export function SettingsBar({ proxyUrl, noProxy, onSave, theme, onThemeChange, showTools, onShowToolsChange, showSuggestions, onShowSuggestionsChange }: Props) {
   const [draftProxy, setDraftProxy] = useState(proxyUrl);
   const [draftNoProxy, setDraftNoProxy] = useState(noProxy);
 
@@ -54,6 +60,44 @@ export function SettingsBar({ proxyUrl, noProxy, onSave, theme, onThemeChange }:
           ))}
         </div>
       </div>
+
+      {/* Tool calls visibility */}
+      {onShowToolsChange && (
+        <div className="settings-row">
+          <label className="settings-label">🛠 Tools</label>
+          <div className="theme-switcher">
+            {([[true, 'Show'], [false, 'Hide']] as const).map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                className={`theme-switcher-btn ${showTools === value ? 'theme-switcher-btn--active' : ''}`}
+                onClick={() => onShowToolsChange(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Suggested actions */}
+      {onShowSuggestionsChange && (
+        <div className="settings-row">
+          <label className="settings-label">💡 Suggestions</label>
+          <div className="theme-switcher">
+            {([[true, 'Show'], [false, 'Hide']] as const).map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                className={`theme-switcher-btn ${showSuggestions === value ? 'theme-switcher-btn--active' : ''}`}
+                onClick={() => onShowSuggestionsChange(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Proxy URL */}
       <div className="settings-row">

@@ -4,9 +4,14 @@ import { TextPartView } from './parts/TextPartView';
 import { FilePartView } from './parts/FilePartView';
 import { DataPartView } from './parts/DataPartView';
 import { DebugDrawer } from './DebugDrawer';
+import type { Suggestion } from '../utils/suggestions';
 
 interface Props {
   message: ChatMessage;
+  showTools?: boolean;
+  /** Follow-up actions to show as chips under the bubble (last agent message only) */
+  suggestions?: Suggestion[];
+  onSuggestion?: (message: string) => void;
 }
 
 // The request/response "{ } Debug" drawer is dev-only — hide it in
@@ -52,7 +57,7 @@ function renderVisiblePart(part: Part, index: number) {
   }
 }
 
-export function MessageBubble({ message }: Props) {
+export function MessageBubble({ message, showTools = true, suggestions, onSuggestion }: Props) {
   const isUser   = message.role === 'user';
   const isSystem = message.role === 'system';
 
@@ -84,7 +89,22 @@ export function MessageBubble({ message }: Props) {
         )}
       </div>
 
-      {dataParts.length > 0 && <DataPartsDrawer parts={dataParts} />}
+      {showTools && dataParts.length > 0 && <DataPartsDrawer parts={dataParts} />}
+
+      {suggestions && suggestions.length > 0 && onSuggestion && (
+        <div className="suggestions">
+          {suggestions.map(s => (
+            <button
+              key={s.message}
+              className="suggestion-chip"
+              title={s.message}
+              onClick={() => onSuggestion(s.message)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <span className="msg-time">{formatTime(message.timestamp)}</span>
 

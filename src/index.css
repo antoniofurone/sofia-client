@@ -105,23 +105,27 @@ body {
 }
 
 /* ---- Scrollbar ---- */
+/* Same look as the table scrollbar (Chrome/Edge/Safari); wide and high-contrast so it is noticed */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 12px;
+  height: 12px;
 }
-::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-track { background: var(--surface2); }
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--muted);
+  border: 3px solid var(--surface2); /* shrinks the visible thumb, like padding */
   border-radius: 99px;
 }
-::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+::-webkit-scrollbar-corner { background: var(--surface2); }
 
 /* ---- App Layout ---- */
 .app {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  max-width: 900px;
+  /* Wide layout: tables need the room (avoids horizontal scrolling) */
+  max-width: min(1600px, 100%);
   margin: 0 auto;
   padding: 0 12px;
 }
@@ -1039,7 +1043,7 @@ body {
 .msg-bubble-resizer {
   resize: horizontal;
   overflow: hidden;
-  width: 72%;
+  width: 96%;
   min-width: 220px;
   max-width: calc(100% - 46px);
 }
@@ -1233,7 +1237,7 @@ body {
   max-width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  /* Firefox: thicker, higher-contrast than the app-wide 5px scrollbar (see
+  /* Firefox: thicker, higher-contrast than the app-wide scrollbar (see
      ::-webkit-scrollbar above) — tables scroll on both axes and the content
      itself gives no visual hint that there's more off to the side/below, so
      the scrollbar needs to actually be noticed here. */
@@ -1271,14 +1275,16 @@ body {
   border: 1px solid var(--border);
   padding: 6px 10px;
   text-align: left;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-/* ── Data cells: truncate long content, show ellipsis ── */
+.text-part.markdown-body th { white-space: nowrap; }
+
+/* ── Data cells: wrap long content (no horizontal scroll for typical tables) ── */
 .text-part.markdown-body td {
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 90px;
+  max-width: 360px;
 }
 
 /* ── Sticky header row ── */

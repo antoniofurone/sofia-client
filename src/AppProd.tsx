@@ -215,7 +215,7 @@ export function AppProd() {
             <button
               className={`header-agent-chip${showAgentCard ? ' header-agent-chip--active' : ''}`}
               onClick={() => setShowAgentCard(v => !v)}
-              title={agentCard ? 'Agent details' : selectedAgent}
+              title={agentCard ? `${chipLabel}${chipVersion ? ` v${chipVersion}` : ''} — agent details` : selectedAgent}
             >
               <span className="header-agent-dot" />
               <span className="header-agent-name">{chipLabel}</span>
@@ -229,11 +229,7 @@ export function AppProd() {
           )}
 
           {auth.authenticated && auth.userId && (
-            <span className="header-user-badge" title={`Profile: ${JSON.stringify(auth.profile ?? {})}`}>
-              {auth.appName
-                ? <>{auth.appName}<span className="header-user-sep">/</span>{auth.userId}</>
-                : auth.userId}
-            </span>
+            <span className="header-user-badge" title={auth.userId}>{auth.userId}</span>
           )}
 
           <button
@@ -288,6 +284,7 @@ export function AppProd() {
             onShowToolsChange={setShowTools}
             showSuggestions={showSuggestions}
             onShowSuggestionsChange={setShowSuggestions}
+            appName={auth.appName}
           />
         )}
 

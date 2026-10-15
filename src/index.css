@@ -1674,9 +1674,8 @@ body {
    Header user badge (prod mode)
    ============================================================ */
 .header-user-badge {
-  display: flex;
-  align-items: center;
-  gap: 2px;
+  display: block;  /* not flex: text-overflow: ellipsis needs a block container */
+  min-width: 0;
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
@@ -1685,15 +1684,9 @@ body {
   border-radius: 99px;
   padding: 3px 10px;
   white-space: nowrap;
-  max-width: 200px;
+  max-width: 340px;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.header-user-sep {
-  color: var(--border);
-  font-weight: 400;
-  margin: 0 2px;
 }
 
 /* ============================================================

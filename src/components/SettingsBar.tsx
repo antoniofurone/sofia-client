@@ -13,9 +13,12 @@ interface Props {
   /** Suggested-action chips toggle (production only) */
   showSuggestions?: boolean;
   onShowSuggestionsChange?: (show: boolean) => void;
+  /** Integrating app name (app auth mode only): row hidden when not provided */
+  appName?: string | null;
 }
 
 const IS_DEV = import.meta.env.DEV;
+const APP_VERSION = __APP_VERSION__;
 
 const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'dark', label: '🌙 Dark' },
@@ -23,7 +26,7 @@ const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'system', label: '🖥️ System' },
 ];
 
-export function SettingsBar({ proxyUrl, noProxy, onSave, theme, onThemeChange, showTools, onShowToolsChange, showSuggestions, onShowSuggestionsChange }: Props) {
+export function SettingsBar({ proxyUrl, noProxy, onSave, theme, onThemeChange, showTools, onShowToolsChange, showSuggestions, onShowSuggestionsChange, appName }: Props) {
   const [draftProxy, setDraftProxy] = useState(proxyUrl);
   const [draftNoProxy, setDraftNoProxy] = useState(noProxy);
 
@@ -137,11 +140,25 @@ export function SettingsBar({ proxyUrl, noProxy, onSave, theme, onThemeChange, s
         </div>
       </div>
 
+      {/* App version */}
+      <div className="settings-row">
+        <label className="settings-label">ℹ️ Version</label>
+        <span className="settings-hint">v{APP_VERSION}</span>
+      </div>
+
+      {/* Integrating app (app auth mode) */}
+      {appName && (
+        <div className="settings-row">
+          <label className="settings-label">🔌 App</label>
+          <span className="settings-hint">{appName}</span>
+        </div>
+      )}
+
       {/* Actions + hint */}
       <div className="settings-footer">
         <p className="settings-hint">
           {IS_DEV
-            ? 'Applied server-side via Vite proxy. No proxy: comma-separated hostnames, supports .suffix wildcards.'
+            ? 'Proxy settings are applied server-side via the Vite proxy. "No proxy" field: comma-separated hostnames, supports .suffix wildcards.'
             : '⚠ No effect in production builds — configure your system or agent-side proxy.'}
         </p>
         <div className="settings-actions">

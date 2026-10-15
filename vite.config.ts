@@ -5,6 +5,7 @@ import https from 'node:https'
 import { URL } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { ProxyAgent } from 'undici'
+import pkg from './package.json'
 
 /**
  * Returns true if targetHostname should bypass the proxy.
@@ -220,6 +221,10 @@ export default defineConfig({
   // Must match BASE_PATH runtime env on the Express server.
   // Leave unset (defaults to '/') when served at the domain root.
   base: process.env.VITE_BASE ?? '/',
+  // App version: single source of truth is package.json (shown in Settings)
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   plugins: [react(), a2aProxyPlugin()],
   server: {
     port: 5173,

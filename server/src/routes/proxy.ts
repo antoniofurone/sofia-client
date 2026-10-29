@@ -32,6 +32,12 @@ async function resolveRpcUrl(baseUrl: string, apiKey: string | null): Promise<st
       if (r.ok) {
         const card = await r.json() as Record<string, unknown>;
         const rpcUrl = (card['url'] as string | undefined) ?? baseUrl;
+        // Log-only: the card decides where requests (and the X-API-Key) go.
+        try {
+          if (new URL(rpcUrl).host !== new URL(baseUrl).host) {
+            console.warn(`[proxy] agent card url host differs from configured url: configured=${new URL(baseUrl).host} card=${new URL(rpcUrl).host}`);
+          }
+        } catch { /* unparsable URL — nothing to compare */ }
         rpcUrlCache.set(baseUrl, { rpcUrl, cachedAt: Date.now() });
         return rpcUrl;
       }
@@ -62,7 +68,12 @@ function injectMetadata(
 
   const params = (payload.params ?? {}) as Record<string, unknown>;
   const message = (params.message ?? {}) as Record<string, unknown>;
-  const existing = (message.metadata ?? {}) as Record<string, unknown>;
+  // Identity fields are server-owned: drop anything the client put there so it
+  // can't spoof a profile/app when the session has none.
+  const {
+    user_id: _uid, app_name: _app, profile: _prof,
+    ...existing
+  } = (message.metadata ?? {}) as Record<string, unknown>;
 
   return {
     ...payload,
@@ -270,9 +281,11 @@ router.post('/stream', requireAuth, async (req: Request, res: Response): Promise
     }, 30_000);
 
     const reader = upstream.body.getReader();
-    req.on('close', () => {
+    // res (not req): since Node 16 the request's 'close' fires once the body has
+    // been read, so a listener added here never saw the client disconnecting.
+    res.on('close', () => {
       controller.abort();
-      reader.cancel();
+      reader.cancel().catch(() => { /* already finished/errored */ });
       if (!endedNormally) {
         // Fires on any premature close: client navigated away, but also on a
         // silent cutoff imposed by something in front of this server (load

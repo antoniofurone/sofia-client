@@ -66,4 +66,4 @@ INSERT INTO
     "url",
     "api_key" )
 VALUES
-  ( 'translator', 'https://ag-translator-508683109767.europe-west8.run.app', 'stls_f0444b3160d740d41e179310334092c84a51d92587e2814cc583a1e1da9ffbaa' );
+  ( 'translator', 'https://ag-translator-508683109767.europe-west8.run.app', '<AGENT_API_KEY>' );

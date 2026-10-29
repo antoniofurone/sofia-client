@@ -86,6 +86,8 @@ Creates the following tables:
 #### `VITE_AUTH_MODE=none`
 No login. All agents in `sf_agents_config` are accessible.
 
+> **Security**: in this mode anyone who can reach the URL can chat with every configured agent (the server adds their API keys) and call `/api/suggestions` (LLM cost). Use it only on an internal network or behind another authentication layer (e.g. IAP, VPN, reverse-proxy auth). The server logs a warning at startup when `NODE_ENV=production` and the mode is `none`.
+
 #### `VITE_AUTH_MODE=user`
 Standard login form. Users authenticate with `user_id` + password.  
 Credentials are stored in `sf_user` (type `user`, `pwd_hash` = bcrypt hash).

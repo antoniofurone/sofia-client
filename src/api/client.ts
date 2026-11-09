@@ -98,7 +98,7 @@ export async function* streamChat(
   proxyUrl?: string,
   noProxy?: string,
   history?: A2AMessage[],
-): AsyncGenerator<{ parts: Part[]; context_id: string; done: boolean; rawEvent?: Record<string, unknown> }> {
+): AsyncGenerator<{ parts: Part[]; context_id: string; done: boolean; append?: boolean; rawEvent?: Record<string, unknown> }> {
   const payload = jsonRpcPayload('message/stream', buildMessage(parts, contextId, history));
   const res = await agentFetch(agentRpcUrl, {
     method: 'POST',
@@ -134,7 +134,7 @@ export async function* streamChat(
     const topError = event['error'] as Record<string, unknown> | undefined;
     if (topError) {
       const msg = (topError['message'] as string | undefined) ?? 'Stream error';
-      return { parts: [{ kind: 'text', text: `⚠ ${msg}` }], context_id: currentContextId, done: true, rawEvent: event };
+      return { parts: [{ kind: 'text', text: `⚠ ${msg}` }] as Part[], context_id: currentContextId, done: true, rawEvent: event };
     }
 
     const result = (event['result'] ?? {}) as Record<string, unknown>;
@@ -175,7 +175,7 @@ export async function* streamChat(
       }
     }
 
-    if (outParts.length > 0 || isFinal) return { parts: outParts, context_id: currentContextId, done: isFinal, rawEvent: event };
+    if (outParts.length > 0 || isFinal) return { parts: outParts, context_id: currentContextId, done: isFinal, append: kind === 'artifact-update' && result['append'] === true, rawEvent: event };
     return null;
   };
 

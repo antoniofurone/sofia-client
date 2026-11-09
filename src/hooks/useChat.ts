@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { ChatMessage, DebugInfo, Part } from '../types/a2a';
+import { appendParts } from '../api/clientUtils';
 import { sendChat, streamChat } from '../api/client';
 
 interface UseChatOptions {
@@ -104,7 +105,7 @@ export function useChat({ agentRpcUrl, apiKey, proxyUrl, noProxy, streaming, onE
           }
           if (chunk.rawEvent) rawEvents.push(chunk.rawEvent);
           if (chunk.parts && chunk.parts.length > 0) {
-            accumulated.push(...chunk.parts);
+            appendParts(accumulated, chunk.parts, chunk.append);
             updateMessage(agentMsgId, m => ({ ...m, parts: [...accumulated] }));
           }
           if (chunk.done) {

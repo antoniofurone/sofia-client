@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { ChatMessage, DebugInfo, Part } from '../types/a2a';
+import { appendParts } from '../api/clientUtils';
 import { sendChatProd, streamChatProd } from '../api/prodClient';
 
 // Client-side timeout: if no SSE chunk arrives within this window, abort.
@@ -101,7 +102,7 @@ export function useChatProd({ agentName, streaming, onError, onSessionExpired }:
             if (chunk.context_id) contextIdRef.current = chunk.context_id;
             if (chunk.rawEvent) rawEvents.push(chunk.rawEvent);
             if (chunk.parts.length > 0) {
-              accumulated.push(...chunk.parts);
+              appendParts(accumulated, chunk.parts, chunk.append);
               updateMessage(agentMsgId, m => ({ ...m, parts: [...accumulated] }));
             }
             if (chunk.done) {

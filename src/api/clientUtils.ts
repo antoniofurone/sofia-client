@@ -32,3 +32,23 @@ export function extractContextId(responseJson: Record<string, unknown>): string 
     ((result['message'] as Record<string, unknown> | undefined)?.['contextId'] as string | undefined)
   );
 }
+
+/**
+ * Accumulates the parts of a streamed chunk into `acc` (mutated in place).
+ * A2A TaskArtifactUpdateEvent.append=true means the chunk continues the
+ * previous artifact content: consecutive text parts are concatenated instead of
+ * being rendered as separate paragraphs (token-by-token streaming).
+ * The last element is replaced, not mutated, since earlier snapshots of `acc`
+ * may still be held by React state.
+ */
+export function appendParts(acc: Part[], incoming: Part[], append?: boolean): void {
+  for (let i = 0; i < incoming.length; i++) {
+    const part = incoming[i];
+    const last = acc[acc.length - 1];
+    if (i === 0 && append && last && last.kind === 'text' && part.kind === 'text') {
+      acc[acc.length - 1] = { ...last, text: last.text + part.text };
+    } else {
+      acc.push(part);
+    }
+  }
+}
